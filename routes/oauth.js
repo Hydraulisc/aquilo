@@ -8,6 +8,7 @@ const globals = JSON.parse(fs.readFileSync('globals.json', 'utf8'));
 
 const router = express.Router();
 
+// TO-DO: Prevent clickjacking and CSRF by adding state parameter
 router.get('/login', (req, res) => {
     res.redirect(`${globals.hydrauliscAuthUrl}/authorize?client_id=${globals.hydrauliscAuthClient}&redirect_uri=${globals.hydrauliscCallback}&response_type=code`)
 })
