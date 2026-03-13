@@ -190,6 +190,100 @@ function removeMember(serverId, userId) {
     return result.changes > 0;
 }
 
+// Invites
+function createInvite(serverId, userId, { maxUses = null, expiresAt = null } = {}) {
+    const code = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+    db.prepare(
+        'INSERT INTO invites (code, server_id, created_by, max_uses, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(code, serverId, userId, maxUses, expiresAt);
+    return code;
+}
+
+function getInvite(code) {
+    const invite = db.prepare('SELECT * FROM invites WHERE code = ?').get(code);
+    if (!invite) return null;
+    if (invite.expires_at && new Date(invite.expires_at) < new Date()) return null;
+    if (invite.max_uses !== null && invite.uses >= invite.max_uses) return null;
+    return invite;
+}
+
+function getRawInvite(code) {
+    return db.prepare('SELECT * FROM invites WHERE code = ?').get(code);
+}
+
+function getInvitesForServer(serverId) {
+    return db.prepare('SELECT * FROM invites WHERE server_id = ? ORDER BY created_at').all(serverId);
+}
+
+function deleteInvite(code) {
+    const result = db.prepare('DELETE FROM invites WHERE code = ?').run(code);
+    return result.changes > 0;
+}
+
+function useInvite(code) {
+    const result = db.prepare('UPDATE invites SET uses = uses + 1 WHERE code = ?').run(code);
+    return result.changes > 0;
+}
+
+// Users cache
+function upsertUser(id, username, pfp) {
+    db.prepare(
+        `INSERT INTO users (id, username, pfp, updated_at) VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET username=excluded.username, pfp=excluded.pfp, updated_at=excluded.updated_at`
+    ).run(id, username, pfp || null);
+}
+
+function getCachedUser(id) {
+    return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+// PGP Keys
+function setUserKey(userId, publicKey, fingerprint) {
+    db.prepare(
+        `INSERT OR REPLACE INTO user_keys (user_id, public_key, fingerprint, verified_at, created_at)
+         VALUES (?, ?, ?, NULL, datetime('now'))`
+    ).run(userId, publicKey, fingerprint);
+}
+
+function getUserKey(userId) {
+    return db.prepare('SELECT * FROM user_keys WHERE user_id = ?').get(userId);
+}
+
+function verifyUserKey(userId) {
+    db.prepare(`UPDATE user_keys SET verified_at = datetime('now') WHERE user_id = ?`).run(userId);
+}
+
+// Server keys (AES-256-GCM)
+function setServerKey(serverId, aesKey) {
+    db.prepare(
+        `INSERT OR REPLACE INTO server_keys (server_id, aes_key) VALUES (?, ?)`
+    ).run(serverId, aesKey);
+}
+
+function getServerKey(serverId) {
+    return db.prepare('SELECT * FROM server_keys WHERE server_id = ?').get(serverId);
+}
+
+function encryptMessage(plaintext, hexKey) {
+    const key = Buffer.from(hexKey, 'hex');
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, encrypted]).toString('base64');
+}
+
+function decryptMessage(b64ciphertext, hexKey) {
+    const key = Buffer.from(hexKey, 'hex');
+    const buf = Buffer.from(b64ciphertext, 'base64');
+    const iv = buf.slice(0, 12);
+    const tag = buf.slice(12, 28);
+    const encrypted = buf.slice(28);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    return decipher.update(encrypted, null, 'utf8') + decipher.final('utf8');
+}
+
 module.exports = {
     createServer,
     getServer,
@@ -214,4 +308,19 @@ module.exports = {
     getMembers,
     isMember,
     removeMember,
+    createInvite,
+    getInvite,
+    getRawInvite,
+    getInvitesForServer,
+    deleteInvite,
+    useInvite,
+    upsertUser,
+    getCachedUser,
+    setUserKey,
+    getUserKey,
+    verifyUserKey,
+    setServerKey,
+    getServerKey,
+    encryptMessage,
+    decryptMessage,
 };

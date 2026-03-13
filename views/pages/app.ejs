@@ -170,6 +170,12 @@
                     </div>
                 </div>
                 <div class="_3LgFW">
+                    <% if (!serverId) { %>
+                    <div style="display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; gap:12px; opacity:0.5;">
+                        <p style="font-size:18px; font-weight:600;">No server selected</p>
+                        <p style="font-size:13px;">Create or join a server from the sidebar.</p>
+                    </div>
+                    <% } else { %>
                     <div class="hpNYLK">
                         <div class="fPzJRX">
                             <div class="channelHeader cnyIwU">
@@ -225,7 +231,7 @@
                                                             <span class="date-time" style="display: none;"></span>
                                                         </span>
                                                         <div id="message-content">
-                                                            <p class="textContent"><%- message.content %></p>
+                                                            <p class="textContent"><%= message.content %></p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -273,6 +279,7 @@
                         </div>
                     </div>
                 </div>
+                <% } %>
             </div>
         </div>
     </div>
@@ -283,7 +290,34 @@
     <script src="/js/serverSettings.js"></script>
     <% } %>
     <% if (channelId) { %>
-    <div id="chat-context" data-channel-id="<%= channelId %>" data-username="<%- username %>" data-own-pfp="<%- ownPfp %>" hidden></div>
+    <div id="chat-context"
+         data-channel-id="<%= channelId %>"
+         data-server-id="<%= serverId %>"
+         data-username="<%- username %>"
+         data-own-pfp="<%- ownPfp %>"
+         data-unlocked="<%= isUnlocked %>"
+         hidden></div>
+    <div id="unlock-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:var(--bg-secondary,#2b2d31); border-radius:8px; padding:24px; width:480px; max-width:90vw;">
+            <h3 style="margin:0 0 8px; color:var(--text-color);">Unlock Server</h3>
+
+            <div id="unlock-step-1">
+                <p style="margin:0 0 16px; font-size:13px; color:var(--text-muted,#aaa);">Click below to generate a challenge encrypted with your registered public key.</p>
+                <button id="unlock-get-challenge-btn" style="padding:8px 20px; background:var(--accent-color,#5865f2); color:#fff; border:none; border-radius:4px; cursor:pointer;">Get Challenge</button>
+            </div>
+
+            <div id="unlock-step-2" style="display:none;">
+                <p style="margin:0 0 8px; font-size:13px; color:var(--text-muted,#aaa);">Decrypt the message below using your PGP private key (e.g. <code>gpg --decrypt</code>), then paste the result.</p>
+                <textarea id="unlock-challenge-output" rows="6" readonly style="width:100%; box-sizing:border-box; font-family:monospace; font-size:11px; background:var(--bg-tertiary,#1e1f22); color:var(--text-muted,#aaa); border:1px solid var(--border-color,#444); border-radius:4px; padding:8px; resize:none;"></textarea>
+                <p style="margin:12px 0 6px; font-size:13px; color:var(--text-muted,#aaa);">Decrypted result:</p>
+                <input id="unlock-plaintext-input" type="text" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px; background:var(--bg-tertiary,#1e1f22); color:var(--text-color); border:1px solid var(--border-color,#444); border-radius:4px; padding:8px;" placeholder="Paste the decrypted text here">
+                <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+                    <button id="unlock-btn" style="padding:8px 20px; background:var(--accent-color,#5865f2); color:#fff; border:none; border-radius:4px; cursor:pointer;">Verify</button>
+                    <span id="unlock-error" style="font-size:12px; color:#f04747;"></span>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="/js/chat.js"></script>
     <% } %>
 </body>

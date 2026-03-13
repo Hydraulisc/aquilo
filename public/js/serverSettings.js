@@ -392,6 +392,43 @@
         }
     }
 
+    // ── Invites ──
+    const createInviteBtn = document.getElementById('ss-create-invite');
+    const inviteResult = document.getElementById('ss-invite-result');
+    const inviteLink = document.getElementById('ss-invite-link');
+    const copyInviteBtn = document.getElementById('ss-copy-invite');
+
+    if (createInviteBtn) {
+        createInviteBtn.addEventListener('click', async () => {
+            createInviteBtn.disabled = true;
+            try {
+                const res = await fetch(`/api/servers/${serverId}/invites`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to create invite');
+
+                const url = `${location.origin}/invite/${data.code}`;
+                inviteLink.value = url;
+                inviteResult.style.display = '';
+                setStatus('ss-invite-status', '', false);
+            } catch (err) {
+                setStatus('ss-invite-status', err.message, true);
+            } finally {
+                createInviteBtn.disabled = false;
+            }
+        });
+    }
+
+    if (copyInviteBtn) {
+        copyInviteBtn.addEventListener('click', () => {
+            inviteLink.select();
+            navigator.clipboard.writeText(inviteLink.value).then(() => {
+                setStatus('ss-invite-status', 'Copied!', false);
+            }).catch(() => {
+                setStatus('ss-invite-status', 'Copy failed', true);
+            });
+        });
+    }
+
     // ── Danger Zone ──
     if (isOwner) {
         const confirmInput = document.getElementById('ss-confirm-delete');

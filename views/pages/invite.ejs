@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join <%= server.name %> | <%= title %></title>
+    <link rel="shortcut icon" href="/assets/favicon.webp" type="image/x-icon">
+    <link rel="icon" type="image/png" href="/assets/favicon.webp">
+    <link rel="stylesheet" href="/css/authStyles.css">
+    <script src="/js/themeSelector.js"></script>
+</head>
+<body>
+    <div id="root">
+        <div class="registerContainer">
+            <div class="registerPage">
+                <div class="register">
+                    <div class="dynamicRegister">
+                        <div class="login" style="min-height: auto; width: auto !important;">
+                            <div class="bannerDisplay">
+                                <% if (server.icon) { %>
+                                    <img src="<%- server.icon %>" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover;">
+                                <% } else { %>
+                                    <img src="/assets/1000044733-lowres.png" style="width: 25%; height: auto;">
+                                <% } %>
+                            </div>
+                            <div class="title"><%- server.name %></div>
+                            <div class="subtitle"><%= memberCount %> member<%= memberCount !== 1 ? 's' : '' %></div>
+                            <% if (alreadyMember) { %>
+                            <div class="authswitch">You're already a member of this server.</div>
+                            <div class="formItemContainer">
+                                <a href="/server/<%= server.id %>" class="formButton" style="display:block;text-align:center;text-decoration:none;">Open Server</a>
+                            </div>
+                            <% } else { %>
+                            <div class="formItemContainer">
+                                <button class="formButton" id="join-btn">Join Server</button>
+                            </div>
+                            <div class="authswitch" id="join-status"></div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <% if (!alreadyMember) { %>
+    <script>
+        document.getElementById('join-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('join-btn');
+            const status = document.getElementById('join-status');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/invites/<%= code %>/join', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    window.location.href = '/server/' + data.serverId;
+                } else {
+                    status.textContent = data.error || 'Failed to join server.';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                status.textContent = 'Network error.';
+                btn.disabled = false;
+            }
+        });
+    </script>
+    <% } %>
+</body>
+</html>
