@@ -2,7 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
-const cookieParser = require('cookie-parser');
 const globals = JSON.parse(fs.readFileSync('globals.json', 'utf8'));
 const { version } = require('./package.json');
 const db = require('./database/helpers');
@@ -35,19 +34,49 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+app.get('/js/openpgp.min.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'node_modules/openpgp/dist/openpgp.min.js'));
+});
+
 // API routes
 app.use('/api', apiRoutes);
 app.use('/oauth', oauthRoutes);
 
-// DEV ONLY — fake login to test without OAuth
-app.get('/dev-login', (req, res) => {
-    req.session.user = { id: 1 };
-    res.json({ message: 'Logged in as user 1', user: req.session.user });
-});
+function requireKey(req, res, next) {
+    if (!req.session.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+    const keyRow = db.getUserKey(req.session.user.id);
+    if (!keyRow || !keyRow.verified_at) return res.redirect('/setup');
+    next();
+}
 
 // Onboarding
 app.get('/', async (req, res) => {
     try {
+        const user = req.session.user;
+        if (user) {
+            const keyRow = db.getUserKey(user.id);
+            if (!keyRow || !keyRow.verified_at) return res.redirect('/setup');
+            const resolvedUser = await resolveUser(user.id);
+            const servers = db.getServersForUser(user.id);
+            return res.render('pages/app', {
+                username: resolvedUser.username,
+                uid: resolvedUser.uid,
+                ownPfp: resolvedUser.ownPfp,
+                title: globals.title,
+                bannerURL: globals.bannerURL,
+                shortDescription: globals.shortDescription,
+                kofiURL: globals.kofiURL,
+                serverId: null,
+                serverName: null,
+                channelId: null,
+                channelName: null,
+                servers: servers.map(s => ({ id: s.id, icon: s.icon, name: s.name, unread: false })),
+                channels: [],
+                channelMessages: [],
+                isOwner: false,
+                isUnlocked: false
+            });
+        }
         res.render('pages/welcome', {
             username: null,
             uid: null,
@@ -89,11 +118,57 @@ app.get('/login', async (req, res) => {
     })
 })
 
+app.get('/setup', (req, res) => {
+    if (!req.session.user) return res.redirect('/login?next=/setup');
+    if (req.query.next && req.query.next.startsWith('/')) {
+        req.session.postSetupRedirect = req.query.next;
+    }
+    const keyRow = db.getUserKey(req.session.user.id);
+    if (keyRow && keyRow.verified_at) {
+        const servers = db.getServersForUser(req.session.user.id);
+        if (servers.length) {
+            const channels = db.getChannelsForServer(servers[0].id);
+            return res.redirect(channels.length
+                ? `/server/${servers[0].id}/channel/${channels[0].id}`
+                : `/server/${servers[0].id}`);
+        }
+        return res.redirect('/');
+    }
+    res.render('pages/setup', { title: globals.title });
+});
+
+// Invite landing page
+app.get('/invite/:code', async (req, res) => {
+    try {
+        const invite = db.getInvite(req.params.code);
+        if (!invite) return res.render('pages/404');
+
+        const server = db.getServer(invite.server_id);
+        if (!server) return res.render('pages/404');
+
+        if (!req.session.user) {
+            return res.redirect('/login?next=/invite/' + req.params.code);
+        }
+
+        const memberCount = db.getMembers(invite.server_id).length;
+        const alreadyMember = db.isMember(invite.server_id, req.session.user.id);
+
+        res.render('pages/invite', {
+            title: globals.title,
+            server,
+            memberCount,
+            code: req.params.code,
+            alreadyMember
+        });
+    } catch (err) {
+        res.render('pages/404');
+    }
+});
+
 // Server view — real data
-app.get('/server/:serverId', async (req, res) => {
+app.get('/server/:serverId', requireKey, async (req, res) => {
     try {
         const user = req.session.user;
-        if (!user) return res.redirect('/register?next=' + encodeURIComponent(req.originalUrl));
 
         const server = db.getServer(req.params.serverId);
         if (!server) return res.render('pages/404');
@@ -124,17 +199,17 @@ app.get('/server/:serverId', async (req, res) => {
             servers: userServers.map(s => ({ id: s.id, icon: s.icon, name: s.name, unread: false })),
             channels: channels.map(c => ({ id: c.id, name: c.name, unread: false })),
             channelMessages: [],
-            isOwner: server.owner_id === user.id
+            isOwner: server.owner_id === user.id,
+            isUnlocked: false
         });
     } catch (err) {
         res.render('pages/404');
     }
 });
 
-app.get('/server/:serverId/channel/:channelId', async (req, res) => {
+app.get('/server/:serverId/channel/:channelId', requireKey, async (req, res) => {
     try {
         const user = req.session.user;
-        if (!user) return res.redirect('/register?next=' + encodeURIComponent(req.originalUrl));
 
         const server = db.getServer(req.params.serverId);
         if (!server) return res.render('pages/404');
@@ -148,9 +223,20 @@ app.get('/server/:serverId/channel/:channelId', async (req, res) => {
         const userServers = db.getServersForUser(user.id);
         const resolvedUser = await resolveUser(user.id);
 
+        const isUnlocked = req.session.unlockedServers?.[server.id] === true;
+        let decryptedMessages = [];
+        if (isUnlocked) {
+            const serverKey = db.getServerKey(server.id);
+            decryptedMessages = rawMessages.map(m => {
+                if (!serverKey) return m;
+                try { return { ...m, content: db.decryptMessage(m.content, serverKey.aes_key) }; }
+                catch { return m; }
+            });
+        }
+
         // Resolve user info for each message
         const channelMessages = await Promise.all(
-            rawMessages.reverse().map(async (m) => {
+            decryptedMessages.reverse().map(async (m) => {
                 const msgUser = await resolveUser(m.user_id);
                 return {
                     id: m.id,
@@ -176,7 +262,8 @@ app.get('/server/:serverId/channel/:channelId', async (req, res) => {
             servers: userServers.map(s => ({ id: s.id, icon: s.icon, name: s.name, unread: false })),
             channels: channels.map(c => ({ id: c.id, name: c.name, unread: false })),
             channelMessages,
-            isOwner: server.owner_id === user.id
+            isOwner: server.owner_id === user.id,
+            isUnlocked
         });
     } catch (err) {
         res.render('pages/404');

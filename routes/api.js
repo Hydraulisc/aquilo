@@ -3,6 +3,8 @@ const router = express.Router();
 const { sanitize } = require('../middleware/sanitize');
 const db = require('../database/helpers');
 const { resolveUser } = require('../utils/resolveUser');
+const openpgp = require('openpgp');
+const crypto = require('crypto');
 
 function requireAuth(req, res, next) {
     if (!req.session.user?.id) return res.status(401).json({ error: 'Unauthorized' });
@@ -18,6 +20,10 @@ router.post('/servers', (req, res) => {
 
     const icon = req.body.icon ? sanitize(req.body.icon.trim()) : null;
     const { serverId, channelId } = db.createServer(name, req.session.user.id, icon);
+
+    const aesKey = crypto.randomBytes(32).toString('hex');
+    db.setServerKey(serverId, aesKey);
+
     res.status(201).json({ id: serverId, channelId });
 });
 
@@ -129,38 +135,51 @@ router.patch('/servers/:serverId/channels/reorder', (req, res) => {
 });
 
 // Messages
-router.get('/channels/:channelId/messages', (req, res) => {
+router.get('/channels/:channelId/messages', async (req, res) => {
     const channel = db.getChannel(req.params.channelId);
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
-    if (!db.isMember(channel.server_id, req.session.user.id)) {
+    if (!db.isMember(channel.server_id, req.session.user.id))
         return res.status(403).json({ error: 'Not a member' });
-    }
+    if (!req.session.unlockedServers?.[channel.server_id])
+        return res.status(403).json({ error: 'Server locked' });
 
     const limit = parseInt(req.query.limit) || 50;
     const before = req.query.before || null;
     const messages = db.getMessages(req.params.channelId, limit, before);
-    res.json(messages);
+    const serverKey = db.getServerKey(channel.server_id);
+
+    const result = await Promise.all(messages.map(async (m) => {
+        let content = m.content;
+        if (serverKey) {
+            try { content = db.decryptMessage(m.content, serverKey.aes_key); } catch {}
+        }
+        const user = await resolveUser(m.user_id);
+        return { ...m, content, user: { username: user.username, ownPfp: user.ownPfp } };
+    }));
+    res.json(result);
 });
 
 router.post('/channels/:channelId/messages', (req, res) => {
     const channel = db.getChannel(req.params.channelId);
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
-    if (!db.isMember(channel.server_id, req.session.user.id)) {
+    if (!db.isMember(channel.server_id, req.session.user.id))
         return res.status(403).json({ error: 'Not a member' });
-    }
+    if (!req.session.unlockedServers?.[channel.server_id])
+        return res.status(403).json({ error: 'Server locked' });
 
-    const content = sanitize((req.body.content || '').trim());
-    if (!content || content.length > 2000) {
+    const plaintext = sanitize((req.body.content || '').trim());
+    if (!plaintext || plaintext.length > 16000)
         return res.status(400).json({ error: 'Invalid message content' });
-    }
 
-    const message = db.createMessage(req.params.channelId, req.session.user.id, content);
-    res.status(201).json(message);
+    const serverKey = db.getServerKey(channel.server_id);
+    const stored = serverKey ? db.encryptMessage(plaintext, serverKey.aes_key) : plaintext;
+    const message = db.createMessage(req.params.channelId, req.session.user.id, stored);
+    res.status(201).json({ ...message, content: plaintext });
 });
 
 router.patch('/messages/:messageId', (req, res) => {
     const content = sanitize((req.body.content || '').trim());
-    if (!content || content.length > 2000) {
+    if (!content || content.length > 16000) {
         return res.status(400).json({ error: 'Invalid message content' });
     }
 
@@ -244,6 +263,131 @@ router.post('/servers/:serverId/leave', (req, res) => {
 
     const left = db.leaveServer(req.params.serverId, req.session.user.id);
     if (!left) return res.status(404).json({ error: 'Not a member' });
+    res.json({ success: true });
+});
+
+// Invites
+router.post('/servers/:serverId/invites', (req, res) => {
+    const server = db.getServer(req.params.serverId);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    if (!db.isMember(req.params.serverId, req.session.user.id)) {
+        return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const maxUses = req.body.maxUses ? parseInt(req.body.maxUses, 10) : null;
+    const expiresAt = req.body.expiresAt || null;
+
+    const code = db.createInvite(req.params.serverId, req.session.user.id, { maxUses, expiresAt });
+    res.status(201).json({ code });
+});
+
+router.get('/servers/:serverId/invites', (req, res) => {
+    const server = db.getServer(req.params.serverId);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    if (server.owner_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const invites = db.getInvitesForServer(req.params.serverId);
+    res.json(invites);
+});
+
+router.delete('/invites/:code', (req, res) => {
+    // Use getInvitesForServer via server owner check — look up raw row first
+    const rawInvite = db.getRawInvite(req.params.code);
+    if (!rawInvite) return res.status(404).json({ error: 'Invite not found' });
+
+    const server = db.getServer(rawInvite.server_id);
+    if (!server || server.owner_id !== req.session.user.id) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    db.deleteInvite(req.params.code);
+    res.json({ success: true });
+});
+
+router.post('/invites/:code/join', (req, res) => {
+    try {
+        const invite = db.getInvite(req.params.code);
+        if (!invite) return res.status(404).json({ error: 'Invalid or expired invite' });
+
+        const joined = db.joinServer(invite.server_id, req.session.user.id);
+        if (!joined) return res.status(409).json({ error: 'Already a member' });
+
+        db.useInvite(req.params.code);
+        res.status(201).json({ success: true, serverId: invite.server_id });
+    } catch (err) {
+        console.error('Invite join error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PGP Keys
+router.post('/keys/submit', async (req, res) => {
+    const armoredKey = (req.body.publicKey || '').trim();
+    if (!armoredKey) return res.status(400).json({ error: 'Missing public key' });
+
+    let key;
+    try {
+        key = await openpgp.readKey({ armoredKey });
+    } catch {
+        return res.status(400).json({ error: 'Invalid PGP public key' });
+    }
+
+    const fingerprint = key.getFingerprint();
+    db.setUserKey(req.session.user.id, armoredKey, fingerprint);
+
+    const nonce = crypto.randomBytes(32).toString('hex');
+    req.session.pgpChallenge = nonce;
+
+    const encrypted = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text: nonce }),
+        encryptionKeys: key
+    });
+
+    res.json({ encryptedChallenge: encrypted });
+});
+
+router.post('/keys/verify', (req, res) => {
+    if (!req.session.pgpChallenge) {
+        return res.status(400).json({ error: 'No active challenge' });
+    }
+    const plaintext = (req.body.plaintext || '').trim();
+    if (plaintext !== req.session.pgpChallenge) {
+        return res.status(403).json({ error: 'Challenge mismatch' });
+    }
+    db.verifyUserKey(req.session.user.id);
+    delete req.session.pgpChallenge;
+    res.json({ success: true });
+});
+
+router.get('/keys/me', (req, res) => {
+    const row = db.getUserKey(req.session.user.id);
+    res.json({ hasKey: !!row, verified: !!(row && row.verified_at) });
+});
+
+router.get('/servers/:serverId/challenge', async (req, res) => {
+    if (!db.isMember(req.params.serverId, req.session.user.id))
+        return res.status(403).json({ error: 'Not a member' });
+    const userKey = db.getUserKey(req.session.user.id);
+    if (!userKey?.verified_at) return res.status(403).json({ error: 'No verified key' });
+
+    const nonce = crypto.randomBytes(32).toString('hex');
+    req.session.serverChallenges = { ...(req.session.serverChallenges || {}), [req.params.serverId]: nonce };
+
+    const pubKey = await openpgp.readKey({ armoredKey: userKey.public_key });
+    const challenge = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text: nonce }),
+        encryptionKeys: pubKey
+    });
+    res.json({ challenge });
+});
+
+router.post('/servers/:serverId/unlock', (req, res) => {
+    const expected = req.session.serverChallenges?.[req.params.serverId];
+    if (!expected) return res.status(400).json({ error: 'No active challenge' });
+    if ((req.body.plaintext || '').trim() !== expected)
+        return res.status(403).json({ error: 'Challenge mismatch' });
+    req.session.unlockedServers = { ...(req.session.unlockedServers || {}), [req.params.serverId]: true };
+    delete req.session.serverChallenges[req.params.serverId];
     res.json({ success: true });
 });
 

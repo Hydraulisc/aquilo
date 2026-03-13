@@ -4,6 +4,7 @@
             <a href="#" data-section="ss-overview" class="active">Overview</a>
             <a href="#" data-section="ss-channels">Channels</a>
             <a href="#" data-section="ss-members">Members</a>
+            <a href="#" data-section="ss-invites">Invites</a>
             <% if (isOwner) { %>
             <a href="#" data-section="ss-danger" class="ss-nav-danger">Danger Zone</a>
             <% } %>
@@ -46,6 +47,20 @@
                 <h2>Members</h2>
                 <div class="ss-member-list" id="ss-member-list"></div>
                 <span class="ss-status" id="ss-members-status"></span>
+            </div>
+
+            <!-- Invites -->
+            <div id="ss-invites" class="ss-section">
+                <h2>Invites</h2>
+                <div class="ss-field">
+                    <button class="ss-btn" id="ss-create-invite">Create Invite Link</button>
+                    <span class="ss-status" id="ss-invite-status"></span>
+                </div>
+                <div class="ss-field" id="ss-invite-result" style="display:none;">
+                    <label for="ss-invite-link">Invite Link</label>
+                    <input type="text" id="ss-invite-link" readonly>
+                    <button class="ss-btn" id="ss-copy-invite">Copy</button>
+                </div>
             </div>
 
             <!-- Danger Zone (owner only) -->

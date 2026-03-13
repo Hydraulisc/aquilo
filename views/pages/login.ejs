@@ -23,7 +23,7 @@
                             <div class="subtitle">Login to continue.</div>
                             <div class="authswitch">Need an account? <a style="color: inherit;" href="https://hydraulisc.net/register" target="_blank">Register on Hydraulisc</a>.</div>
                             <div>
-                                <form action="/oauth/login" method="get" id="register-form">
+                                <form action="/oauth/login?next=<%= next %>" method="get" id="register-form">
                                     <div class="formItemContainer">
                                         <button class="formButton" type="submit">Login</button>
                                     </div>

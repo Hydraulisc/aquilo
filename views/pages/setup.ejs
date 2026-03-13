@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/assets/favicon.webp" type="image/x-icon">
+    <link rel="icon" type="image/png" href="/assets/favicon.webp">
+    <title>Setup | <%- title %></title>
+    <link rel="stylesheet" href="/css/authStyles.css">
+    <script src="/js/themeSelector.js"></script>
+    <style>
+        textarea.pgp-input {
+            width: 100%;
+            box-sizing: border-box;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+            min-height: 120px;
+            padding: 8px;
+            background: var(--input-bg, #2b2d31);
+            color: var(--text-color, #fff);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 4px;
+        }
+        .challenge-block {
+            font-family: monospace;
+            font-size: 11px;
+            word-break: break-all;
+            white-space: pre-wrap;
+            background: var(--input-bg, #2b2d31);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 4px;
+            padding: 8px;
+            max-height: 160px;
+            overflow-y: auto;
+            user-select: all;
+        }
+        .copy-btn {
+            margin-top: 6px;
+            padding: 4px 12px;
+            font-size: 12px;
+            background: transparent;
+            color: var(--text-color, #fff);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .step { transition: opacity 0.3s; }
+        .step.dimmed { opacity: 0.4; pointer-events: none; }
+        .status-msg { margin-top: 8px; font-size: 13px; }
+        .status-msg.error { color: #f04747; }
+        .status-msg.success { color: #43b581; }
+        .hint { font-size: 12px; opacity: 0.6; margin: 6px 0; }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="registerContainer">
+            <div class="registerPage">
+                <div class="register">
+                    <div class="dynamicRegister">
+                        <div class="login" style="min-height: auto; width: auto !important;">
+                            <div class="bannerDisplay">
+                                <img src="/assets/1000044733-lowres.png" style="width: 25%; height: auto;">
+                            </div>
+                            <div class="title">set up end-to-end encryption</div>
+                            <div class="subtitle"><%- title %> requires a verified PGP key before you can chat.</div>
+
+                            <!-- Step 1: submit public key -->
+                            <div id="step1" class="step" style="margin-top: 16px;">
+                                <div class="authswitch" style="margin-bottom: 6px;">Step 1 — Paste your PGP public key</div>
+                                <textarea id="pubkeyInput" class="pgp-input" placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"></textarea>
+                                <div class="formItemContainer" style="margin-top: 8px;">
+                                    <button id="submitKeyBtn" class="formButton" type="button">Submit Public Key</button>
+                                </div>
+                                <div id="step1Status" class="status-msg"></div>
+                            </div>
+
+                            <!-- Step 2: copy encrypted challenge, decrypt locally, paste plaintext -->
+                            <div id="step2" class="step" style="display: none; margin-top: 20px;">
+                                <div class="authswitch" style="margin-bottom: 6px;">Step 2 — Decrypt the challenge with your own PGP tool</div>
+                                <p class="hint">Copy the encrypted message below, decrypt it using your local PGP tool (e.g. <code>gpg --decrypt</code>), then paste the resulting plaintext.</p>
+                                <div id="challengeDisplay" class="challenge-block"></div>
+                                <button class="copy-btn" id="copyBtn" type="button">Copy</button>
+
+                                <div style="margin-top: 14px;">
+                                    <div class="authswitch" style="margin-bottom: 6px;">Paste decrypted text</div>
+                                    <textarea id="plaintextInput" class="pgp-input" style="min-height: 56px;" placeholder="Paste the decrypted string here…"></textarea>
+                                    <div class="formItemContainer" style="margin-top: 8px;">
+                                        <button id="verifyBtn" class="formButton" type="button">Verify</button>
+                                    </div>
+                                </div>
+                                <div id="step2Status" class="status-msg"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (() => {
+        const submitKeyBtn = document.getElementById('submitKeyBtn');
+        const verifyBtn = document.getElementById('verifyBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const step1Status = document.getElementById('step1Status');
+        const step2Status = document.getElementById('step2Status');
+        const challengeDisplay = document.getElementById('challengeDisplay');
+
+        let encryptedChallenge = null;
+
+        submitKeyBtn.addEventListener('click', async () => {
+            const publicKey = document.getElementById('pubkeyInput').value.trim();
+            if (!publicKey) return;
+            submitKeyBtn.disabled = true;
+            step1Status.textContent = 'Submitting…';
+            step1Status.className = 'status-msg';
+
+            try {
+                const res = await fetch('/api/keys/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ publicKey })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Submission failed');
+
+                encryptedChallenge = data.encryptedChallenge;
+                challengeDisplay.textContent = encryptedChallenge;
+                step1Status.textContent = 'Public key accepted.';
+                step1Status.className = 'status-msg success';
+                step1.classList.add('dimmed');
+                step2.style.display = '';
+            } catch (err) {
+                step1Status.textContent = err.message;
+                step1Status.className = 'status-msg error';
+                submitKeyBtn.disabled = false;
+            }
+        });
+
+        copyBtn.addEventListener('click', () => {
+            if (!encryptedChallenge) return;
+            navigator.clipboard.writeText(encryptedChallenge).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+            });
+        });
+
+        verifyBtn.addEventListener('click', async () => {
+            const plaintext = document.getElementById('plaintextInput').value.trim();
+            if (!plaintext) return;
+            verifyBtn.disabled = true;
+            step2Status.textContent = 'Verifying…';
+            step2Status.className = 'status-msg';
+
+            try {
+                const res = await fetch('/api/keys/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plaintext })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Verification failed');
+
+                step2Status.textContent = 'Key verified! Redirecting…';
+                step2Status.className = 'status-msg success';
+                setTimeout(() => { window.location.href = '/setup'; }, 1200);
+            } catch (err) {
+                step2Status.textContent = err.message;
+                step2Status.className = 'status-msg error';
+                verifyBtn.disabled = false;
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
