@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS server_keys (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS reports (
+    id          TEXT PRIMARY KEY,
+    message_id  TEXT NOT NULL,
+    channel_id  TEXT NOT NULL,
+    server_id   TEXT NOT NULL,
+    reporter_id INTEGER NOT NULL,
+    content     TEXT NOT NULL,
+    reported_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reports_server ON reports(server_id);
 `);
 
 // Migrate old PGP schema to AES schema if needed

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warrant Canary | <%- title %></title>
+    <link rel="shortcut icon" href="/assets/favicon.webp" type="image/x-icon">
+    <link rel="icon" type="image/png" href="/assets/favicon.webp">
+    <link rel="stylesheet" href="/css/authStyles.css">
+    <script src="/js/themeSelector.js"></script>
+</head>
+<body>
+    <div id="root">
+        <div class="registerContainer">
+            <div class="registerPage">
+                <div class="register">
+                    <div class="dynamicRegister">
+                        <div class="login" style="min-height: auto; width: auto !important; max-width: 1000px;">
+                            <div class="bannerDisplay">
+                                <img src="/assets/1000044733-lowres.png" style="width: 25%; height: auto;">
+                            </div>
+                            <div class="title">Warrant Canary</div>
+
+                            <% if (canaryText) { %>
+                            <pre style="
+                                text-align: left;
+                                font-family: monospace;
+                                font-size: 12px;
+                                white-space: pre-wrap;
+                                word-break: break-all;
+                                background: var(--bg-secondary, #2b2d31);
+                                border: 1px solid var(--border-color, #444);
+                                border-radius: 6px;
+                                padding: 16px;
+                                margin: 16px 8px;
+                                color: var(--text-color);
+                                line-height: 1.6;
+                            "><%= canaryText %></pre>
+                            <% } else { %>
+                            <div class="subtitle" style="color: #f04747; margin: 16px 8px;">
+                                No canary statement is currently published. This may indicate the canary has been removed.
+                            </div>
+                            <% } %>
+
+                            <div class="authswitch" style="margin-top: 8px;">
+                                <a href="/" style="color: inherit;">&larr; Back to <%- title %></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -5,15 +5,40 @@ bgExit.addEventListener("click", (e) => {
     if (e.target === bgExit) {
         bgExit.style.display = 'none';
     }
-})
+});
 
-function exitCreateModal() {
-    bgExit.style.display = 'none';
-}
-
-function showCreateModal() {
+document.getElementById('open-create-modal')?.addEventListener('click', (e) => {
+    e.preventDefault();
     bgExit.style.display = 'grid';
-}
+});
+
+document.getElementById('cancel-create-modal')?.addEventListener('click', () => {
+    bgExit.style.display = 'none';
+});
+
+// Report buttons
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.msg-report-btn');
+    if (!btn) return;
+    const messageId = btn.dataset.messageId;
+    const msgEl = document.getElementById(messageId);
+    const content = msgEl?.querySelector('.textContent')?.textContent?.trim();
+    if (!content) return;
+    if (!confirm('Report this message to the server owner?')) return;
+    try {
+        const res = await fetch(`/api/messages/${messageId}/report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to report');
+        btn.textContent = '✓';
+        btn.disabled = true;
+    } catch (err) {
+        alert(err.message);
+    }
+});
 
 // Submit via fetch, then redirect to the new server
 const createForm = bgExit.querySelector('form');

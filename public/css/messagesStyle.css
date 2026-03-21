@@ -76,3 +76,124 @@
 .textContent {
     margin: 0;
 }
+
+.msg-row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+}
+
+.msg-report-btn {
+    display: none;
+    position: absolute;
+    right: 8px;
+    top: 14px;
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    border-radius: 4px;
+    color: var(--text-muted, #aaa);
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    opacity: 0.7;
+    line-height: 1;
+}
+
+.msg-row:hover .msg-report-btn {
+    display: inline-block;
+}
+
+.msg-report-btn:hover {
+    opacity: 1;
+    color: #f04747;
+    border-color: #f04747;
+}
+
+.msg-edit-btn {
+    display: none;
+    position: absolute;
+    right: 48px;
+    top: 14px;
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    border-radius: 4px;
+    color: var(--text-muted, #aaa);
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    opacity: 0.7;
+    line-height: 1;
+}
+
+.msg-row:hover .msg-edit-btn {
+    display: inline-block;
+}
+
+.msg-edit-btn:hover {
+    opacity: 1;
+    color: var(--accent-color, #5865f2);
+    border-color: var(--accent-color, #5865f2);
+}
+
+.msg-edit-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+    margin-top: 2px;
+}
+
+.msg-edit-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 6px 8px;
+    background: var(--bg-secondary, #2b2d31);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 4px;
+    color: var(--text-color);
+    font-size: 14px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.msg-edit-save,
+.msg-edit-cancel {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: none;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.msg-edit-save {
+    background: var(--accent-color, #5865f2);
+    color: #fff;
+}
+
+.msg-edit-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.msg-edit-cancel {
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    color: var(--text-muted, #aaa);
+}
+
+.msg-edit-cancel:hover {
+    border-color: var(--text-muted, #aaa);
+    color: var(--text-color);
+}
+
+.msg-edit-error {
+    font-size: 12px;
+    color: #f04747;
+    margin-left: 4px;
+}
+
+.msg-edited-label {
+    font-size: 11px;
+    color: var(--text-secondary, #888);
+    font-style: italic;
+}

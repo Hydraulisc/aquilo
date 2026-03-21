@@ -1,15 +1,74 @@
 const express = require('express');
 const session = require('express-session');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const globals = JSON.parse(fs.readFileSync('globals.json', 'utf8'));
 const { version } = require('./package.json');
 const db = require('./database/helpers');
 const { resolveUser } = require('./utils/resolveUser');
+const { cspNonce, stripIp, getInstanceAdmins } = require('./middleware/security');
 const apiRoutes = require('./routes/api');
 const oauthRoutes = require('./routes/oauth');
 
 const app = express();
+
+// Strip real IPs before anything else
+app.use(stripIp);
+
+// Generate per-request CSP nonce (must run before helmet)
+app.use(cspNonce);
+
+// Security headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+}));
+
+// CORS — restrict to configured origin
+const appOrigin = globals.protocol && globals.siteDomain
+    ? `${globals.protocol}://${globals.siteDomain}`
+    : false;
+app.use(cors({ origin: appOrigin, credentials: true }));
+
+// Rate limiters
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    skipSuccessfulRequests: true,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts, try again later' }
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests' }
+});
+
+const messageLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Sending messages too fast' }
+});
 
 // Middleware
 app.use(express.json());
@@ -39,8 +98,11 @@ app.get('/js/openpgp.min.js', (req, res) => {
 });
 
 // API routes
-app.use('/api', apiRoutes);
+app.use('/api', apiLimiter, apiRoutes);
+app.use('/api/channels', messageLimiter);
 app.use('/oauth', oauthRoutes);
+app.use('/oauth/login', loginLimiter);
+app.use('/oauth/callback', loginLimiter);
 
 function requireKey(req, res, next) {
     if (!req.session.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
@@ -268,6 +330,44 @@ app.get('/server/:serverId/channel/:channelId', requireKey, async (req, res) => 
     } catch (err) {
         res.render('pages/404');
     }
+});
+
+// Instance admin: reports dashboard
+app.get('/admin/reports', async (req, res) => {
+    if (!req.session.user) return res.redirect('/login?next=/admin/reports');
+    if (!getInstanceAdmins().includes(req.session.user.id)) return res.render('pages/404');
+
+    const reports = db.getAllReports();
+    const result = await Promise.all(reports.map(async (r) => {
+        const reporter = await resolveUser(r.reporter_id);
+        const sender = r.sender_id ? await resolveUser(r.sender_id) : null;
+        return {
+            ...r,
+            reporter_username: reporter.username,
+            sender_username: sender?.username ?? null,
+            is_server_owner: r.sender_id === r.server_owner_id
+        };
+    }));
+
+    res.render('pages/reports', { title: globals.title, reports: result });
+});
+
+// Warrant canary
+app.get('/canary.txt', (req, res) => {
+    const canaryPath = path.join(__dirname, 'canary.txt');
+    try {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.sendFile(canaryPath);
+    } catch {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/canary', (req, res) => {
+    const canaryPath = path.join(__dirname, 'canary.txt');
+    let canaryText = null;
+    try { canaryText = fs.readFileSync(canaryPath, 'utf8').trim(); } catch {}
+    res.render('pages/canary', { title: globals.title, canaryText });
 });
 
 // Start server

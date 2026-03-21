@@ -73,7 +73,7 @@
                                         </div>
                                     <% } %>
                                     <div>
-                                        <a href="#create" onclick="showCreateModal()">
+                                        <a href="#create" id="open-create-modal">
                                             <div class="itemContainer">
                                                 <div>
                                                     <svg class="userSelectNone" width="42" height="42" viewBox="0 0 32 32">
@@ -216,7 +216,7 @@
                                                 </div>
                                                 <% unreadShown = true; %>
                                             <% } %>
-                                            <div id="<%- message.id %>">
+                                            <div id="<%- message.id %>" class="msg-row">
                                                 <div class="jCxwsP">
                                                     <div class="csvICB">
                                                         <svg width="36" height="36" viewBox="0 0 32 32">
@@ -235,6 +235,9 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                                <% if (isUnlocked) { %>
+                                                <button class="msg-report-btn" data-message-id="<%- message.id %>" title="Report message">&#9888;</button>
+                                                <% } %>
                                             </div>
                                         <% } %>
                                     </div>

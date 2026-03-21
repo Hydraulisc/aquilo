@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { sanitize } = require('../middleware/sanitize');
+const { timingJitter, requireInstanceAdmin } = require('../middleware/security');
 const db = require('../database/helpers');
 const { resolveUser } = require('../utils/resolveUser');
 const openpgp = require('openpgp');
@@ -135,7 +136,7 @@ router.patch('/servers/:serverId/channels/reorder', (req, res) => {
 });
 
 // Messages
-router.get('/channels/:channelId/messages', async (req, res) => {
+router.get('/channels/:channelId/messages', timingJitter, async (req, res) => {
     const channel = db.getChannel(req.params.channelId);
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     if (!db.isMember(channel.server_id, req.session.user.id))
@@ -159,7 +160,7 @@ router.get('/channels/:channelId/messages', async (req, res) => {
     res.json(result);
 });
 
-router.post('/channels/:channelId/messages', (req, res) => {
+router.post('/channels/:channelId/messages', timingJitter, (req, res) => {
     const channel = db.getChannel(req.params.channelId);
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     if (!db.isMember(channel.server_id, req.session.user.id))
@@ -177,15 +178,26 @@ router.post('/channels/:channelId/messages', (req, res) => {
     res.status(201).json({ ...message, content: plaintext });
 });
 
-router.patch('/messages/:messageId', (req, res) => {
-    const content = sanitize((req.body.content || '').trim());
-    if (!content || content.length > 16000) {
-        return res.status(400).json({ error: 'Invalid message content' });
-    }
+router.patch('/messages/:messageId', timingJitter, (req, res) => {
+    const message = db.getMessage(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+    if (message.user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    const edited = db.editMessage(req.params.messageId, req.session.user.id, content);
+    const channel = db.getChannel(message.channel_id);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+    if (!req.session.unlockedServers?.[channel.server_id])
+        return res.status(403).json({ error: 'Server locked' });
+
+    const plaintext = sanitize((req.body.content || '').trim());
+    if (!plaintext || plaintext.length > 16000)
+        return res.status(400).json({ error: 'Invalid message content' });
+
+    const serverKey = db.getServerKey(channel.server_id);
+    const stored = serverKey ? db.encryptMessage(plaintext, serverKey.aes_key) : plaintext;
+
+    const edited = db.editMessage(req.params.messageId, req.session.user.id, stored);
     if (!edited) return res.status(403).json({ error: 'Forbidden or not found' });
-    res.json({ success: true });
+    res.json({ success: true, content: plaintext });
 });
 
 router.delete('/messages/:messageId', (req, res) => {
@@ -379,6 +391,74 @@ router.get('/servers/:serverId/challenge', async (req, res) => {
         encryptionKeys: pubKey
     });
     res.json({ challenge });
+});
+
+// Reports
+router.post('/messages/:messageId/report', (req, res) => {
+    const message = db.getMessage(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Message not found' });
+
+    const channel = db.getChannel(message.channel_id);
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+
+    if (!db.isMember(channel.server_id, req.session.user.id))
+        return res.status(403).json({ error: 'Not a member' });
+    if (!req.session.unlockedServers?.[channel.server_id])
+        return res.status(403).json({ error: 'Server locked — unlock before reporting' });
+
+    const content = sanitize((req.body.content || '').trim());
+    if (!content) return res.status(400).json({ error: 'Message content required for report' });
+
+    db.createReport(message.id, channel.id, channel.server_id, req.session.user.id, content);
+    res.json({ success: true });
+});
+
+// Instance admin: all reports across every server
+router.get('/reports', requireInstanceAdmin, async (req, res) => {
+    const reports = db.getAllReports();
+    const result = await Promise.all(reports.map(async (r) => {
+        const reporter = await resolveUser(r.reporter_id);
+        const sender = r.sender_id ? await resolveUser(r.sender_id) : null;
+        return {
+            ...r,
+            reporter_username: reporter.username,
+            sender_username: sender?.username ?? null,
+            is_server_owner: r.sender_id === r.server_owner_id
+        };
+    }));
+    res.json(result);
+});
+
+// Dismiss report only
+router.delete('/reports/:reportId', requireInstanceAdmin, (req, res) => {
+    const deleted = db.deleteReport(req.params.reportId);
+    if (!deleted) return res.status(404).json({ error: 'Report not found' });
+    res.json({ success: true });
+});
+
+// Delete the reported message and dismiss the report
+router.delete('/reports/:reportId/message', requireInstanceAdmin, (req, res) => {
+    const report = db.getReport(req.params.reportId);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    if (report.message_id) db.deleteMessageAsOwner(report.message_id);
+    db.deleteReport(report.id);
+    res.json({ success: true });
+});
+
+// Kick the message sender from the server (cascade deletes server if sender is owner)
+router.post('/reports/:reportId/kick', requireInstanceAdmin, (req, res) => {
+    const report = db.getReport(req.params.reportId);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+    const message = db.getMessage(report.message_id);
+    if (!message) return res.status(404).json({ error: 'Message no longer exists' });
+    const server = db.getServer(report.server_id);
+    if (server && message.user_id === server.owner_id) {
+        db.deleteServerAdmin(report.server_id); // cascades channels, messages, memberships, invites, reports
+        return res.json({ success: true, serverDeleted: true });
+    }
+    db.removeMember(report.server_id, message.user_id);
+    db.deleteReport(report.id);
+    res.json({ success: true, serverDeleted: false });
 });
 
 router.post('/servers/:serverId/unlock', (req, res) => {
