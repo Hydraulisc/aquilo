@@ -115,13 +115,12 @@ function channelCount(serverId) {
 }
 
 // Messages
-function createMessage(channelId, userId, content) {
-    const id = crypto.randomUUID();
+function createMessage(id, channelId, userId, content, frank = null) {
     const ts = coarseTimestamp();
     db.prepare(
-        'INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, channelId, userId, content, ts);
-    return { id, channel_id: channelId, user_id: userId, content, created_at: ts };
+        'INSERT INTO messages (id, channel_id, user_id, content, frank, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, channelId, userId, content, frank, ts);
+    return { id, channel_id: channelId, user_id: userId, content, frank, created_at: ts };
 }
 
 function getMessages(channelId, limit = 50, before = null) {
@@ -237,11 +236,11 @@ function useInvite(code) {
 }
 
 // Reports
-function createReport(messageId, channelId, serverId, reporterId, content) {
+function createReport(messageId, channelId, serverId, reporterId, content, frankVerified = null) {
     const id = crypto.randomUUID();
     db.prepare(
-        'INSERT INTO reports (id, message_id, channel_id, server_id, reporter_id, content) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, messageId, channelId, serverId, reporterId, content);
+        'INSERT INTO reports (id, message_id, channel_id, server_id, reporter_id, content, frank_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, messageId, channelId, serverId, reporterId, content, frankVerified);
     return id;
 }
 

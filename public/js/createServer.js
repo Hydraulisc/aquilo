@@ -25,11 +25,12 @@ document.addEventListener('click', async (e) => {
     const content = msgEl?.querySelector('.textContent')?.textContent?.trim();
     if (!content) return;
     if (!confirm('Report this message to the server owner?')) return;
+    const frankKey = msgEl?.dataset?.frankKey || null;
     try {
         const res = await fetch(`/api/messages/${messageId}/report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content })
+            body: JSON.stringify({ content, frank_key: frankKey })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to report');

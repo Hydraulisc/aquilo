@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { sanitize } = require('../middleware/sanitize');
-const { timingJitter, requireInstanceAdmin } = require('../middleware/security');
+const { timingJitter, requireInstanceAdmin, computeFrankKey, computeFrank } = require('../middleware/security');
 const db = require('../database/helpers');
 const { resolveUser } = require('../utils/resolveUser');
 const openpgp = require('openpgp');
@@ -154,8 +154,14 @@ router.get('/channels/:channelId/messages', timingJitter, async (req, res) => {
         if (serverKey) {
             try { content = db.decryptMessage(m.content, serverKey.aes_key); } catch {}
         }
+        let frankKeyHex = null;
+        if (serverKey && m.frank) {
+            const frankKey = computeFrankKey(serverKey.aes_key, m.id);
+            frankKeyHex = frankKey.toString('hex');
+            frankKey.fill(0);
+        }
         const user = await resolveUser(m.user_id);
-        return { ...m, content, user: { username: user.username, ownPfp: user.ownPfp } };
+        return { ...m, content, frank_key: frankKeyHex, user: { username: user.username, ownPfp: user.ownPfp } };
     }));
     res.json(result);
 });
@@ -172,10 +178,21 @@ router.post('/channels/:channelId/messages', timingJitter, (req, res) => {
     if (!plaintext || plaintext.length > 16000)
         return res.status(400).json({ error: 'Invalid message content' });
 
+    const messageId = crypto.randomUUID();
     const serverKey = db.getServerKey(channel.server_id);
     const stored = serverKey ? db.encryptMessage(plaintext, serverKey.aes_key) : plaintext;
-    const message = db.createMessage(req.params.channelId, req.session.user.id, stored);
-    res.status(201).json({ ...message, content: plaintext });
+
+    let frank = null;
+    let frankKeyHex = null;
+    if (serverKey) {
+        const frankKey = computeFrankKey(serverKey.aes_key, messageId);
+        frank = computeFrank(frankKey, plaintext);
+        frankKeyHex = frankKey.toString('hex');
+        frankKey.fill(0);
+    }
+
+    const message = db.createMessage(messageId, req.params.channelId, req.session.user.id, stored, frank);
+    res.status(201).json({ ...message, content: plaintext, frank_key: frankKeyHex });
 });
 
 router.patch('/messages/:messageId', timingJitter, (req, res) => {
@@ -409,7 +426,23 @@ router.post('/messages/:messageId/report', (req, res) => {
     const content = sanitize((req.body.content || '').trim());
     if (!content) return res.status(400).json({ error: 'Message content required for report' });
 
-    db.createReport(message.id, channel.id, channel.server_id, req.session.user.id, content);
+    const submittedFrankKey = (req.body.frank_key || '').trim();
+    let frankVerified = null;
+    if (message.frank) {
+        if (submittedFrankKey) {
+            const serverKey = db.getServerKey(channel.server_id);
+            if (serverKey) {
+                const canonicalFrankKey = computeFrankKey(serverKey.aes_key, message.id);
+                const expectedFrank = computeFrank(canonicalFrankKey, content);
+                canonicalFrankKey.fill(0);
+                frankVerified = expectedFrank === message.frank ? 1 : 0;
+            }
+        } else {
+            frankVerified = 0; // message has frank but no key submitted
+        }
+    }
+
+    db.createReport(message.id, channel.id, channel.server_id, req.session.user.id, content, frankVerified);
     res.json({ success: true });
 });
 

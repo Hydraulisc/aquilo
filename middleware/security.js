@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
+
 const path = require('path');
 
 function getInstanceAdmins() {
@@ -36,4 +37,18 @@ function timingJitter(req, res, next) {
     setTimeout(next, delay);
 }
 
-module.exports = { cspNonce, stripIp, timingJitter, requireInstanceAdmin, getInstanceAdmins };
+// frank_key = HMAC-SHA256(serverAesKey, messageId) — deterministic, never stored
+function computeFrankKey(serverAesKeyHex, messageId) {
+    return crypto.createHmac('sha256', Buffer.from(serverAesKeyHex, 'hex'))
+        .update(messageId)
+        .digest(); // Buffer
+}
+
+// frank = HMAC-SHA256(frankKey, plaintext) — stored with the message as a commitment
+function computeFrank(frankKey, plaintext) {
+    return crypto.createHmac('sha256', frankKey)
+        .update(plaintext, 'utf8')
+        .digest('hex');
+}
+
+module.exports = { cspNonce, stripIp, timingJitter, requireInstanceAdmin, getInstanceAdmins, computeFrankKey, computeFrank };

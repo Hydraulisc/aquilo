@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS messages (
     channel_id TEXT NOT NULL,
     user_id INTEGER NOT NULL,
     content TEXT NOT NULL,
+    frank TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     edited_at TEXT DEFAULT NULL,
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
@@ -88,9 +89,10 @@ CREATE TABLE IF NOT EXISTS reports (
     message_id  TEXT NOT NULL,
     channel_id  TEXT NOT NULL,
     server_id   TEXT NOT NULL,
-    reporter_id INTEGER NOT NULL,
-    content     TEXT NOT NULL,
-    reported_at TEXT NOT NULL DEFAULT (datetime('now'))
+    reporter_id   INTEGER NOT NULL,
+    content       TEXT NOT NULL,
+    frank_verified INTEGER DEFAULT NULL,
+    reported_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_reports_server ON reports(server_id);
 `);
@@ -107,6 +109,18 @@ if (cols.length > 0 && !cols.some(c => c.name === 'aes_key')) {
             FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
         );
     `);
+}
+
+// Migrate: add frank column to messages if missing
+const msgCols = db.prepare("PRAGMA table_info(messages)").all();
+if (!msgCols.some(c => c.name === 'frank')) {
+    db.exec("ALTER TABLE messages ADD COLUMN frank TEXT DEFAULT NULL");
+}
+
+// Migrate: add frank_verified column to reports if missing
+const rptCols = db.prepare("PRAGMA table_info(reports)").all();
+if (!rptCols.some(c => c.name === 'frank_verified')) {
+    db.exec("ALTER TABLE reports ADD COLUMN frank_verified INTEGER DEFAULT NULL");
 }
 
 module.exports = db;

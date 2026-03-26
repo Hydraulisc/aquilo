@@ -99,6 +99,16 @@
             margin-left: 4px;
             vertical-align: middle;
         }
+        .frank-badge {
+            font-size: 10px;
+            padding: 1px 7px;
+            border-radius: 3px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+        .frank-badge.verified { background: #1a3a1a; color: #4caf50; }
+        .frank-badge.unverified { background: #3a2a0a; color: #ff9800; }
+        .frank-badge.legacy { background: #2a2a2a; color: #888; }
     </style>
 </head>
 <body>
@@ -128,6 +138,15 @@
                                         </span>
                                         <span><strong>Reported by</strong> <%= r.reporter_username %></span>
                                         <span><strong>At</strong> <%= r.reported_at %></span>
+                                        <span>
+                                            <% if (r.frank_verified === 1) { %>
+                                            <span class="frank-badge verified">&#10003; Verified</span>
+                                            <% } else if (r.frank_verified === 0) { %>
+                                            <span class="frank-badge unverified">&#9888; Unverified</span>
+                                            <% } else { %>
+                                            <span class="frank-badge legacy">&#8212; Legacy</span>
+                                            <% } %>
+                                        </span>
                                     </div>
                                     <div class="report-content"><%= r.content %></div>
                                     <div class="report-actions">

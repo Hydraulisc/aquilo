@@ -33,6 +33,7 @@ if (chatContainer) {
         const div = document.createElement('div');
         div.id = msg.id;
         div.className = 'msg-row';
+        if (msg.frank_key) div.dataset.frankKey = msg.frank_key;
 
         const contentDiv = document.createElement('div');
         contentDiv.id = 'message-content';
@@ -264,6 +265,6 @@ if (chatContainer) {
     if (!isUnlocked) {
         showModal();
     } else {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        fetchAndRenderMessages();
     }
 }
