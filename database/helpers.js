@@ -123,7 +123,7 @@ function createMessage(id, channelId, userId, content, frank = null) {
     return { id, channel_id: channelId, user_id: userId, content, frank, created_at: ts };
 }
 
-function getMessages(channelId, limit = 50, before = null) {
+function getMessages(channelId, limit = 50, before = null, after = null) {
     limit = Math.min(Math.max(1, limit), 50);
     if (before) {
         return db.prepare(
@@ -131,6 +131,13 @@ function getMessages(channelId, limit = 50, before = null) {
              WHERE channel_id = ? AND rowid < (SELECT rowid FROM messages WHERE id = ?)
              ORDER BY rowid DESC LIMIT ?`
         ).all(channelId, before, limit);
+    }
+    if (after) {
+        return db.prepare(
+            `SELECT * FROM messages
+             WHERE channel_id = ? AND rowid > (SELECT rowid FROM messages WHERE id = ?)
+             ORDER BY rowid ASC LIMIT ?`
+        ).all(channelId, after, limit);
     }
     return db.prepare(
         'SELECT * FROM messages WHERE channel_id = ? ORDER BY rowid DESC LIMIT ?'

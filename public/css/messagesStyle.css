@@ -1,199 +1,258 @@
+/* ── Unread divider ──────────────────────────── */
+
 .unread-divider {
-    margin: 0 .65rem 0 .15rem;
-    align-items: center;
-    justify-content: center;
-    z-index: 1;
+    margin: 8px 16px;
     display: flex;
-    border-top: 1px solid var(--accent-color);
+    align-items: center;
+    gap: 10px;
+}
+
+.unread-divider::before,
+.unread-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--accent-color);
+    opacity: 0.35;
 }
 
 .unread-text {
-    background-color: var(--accent-color);
+    background: rgba(128, 134, 212, 0.12);
+    border: 1px solid rgba(128, 134, 212, 0.3);
+    border-radius: 20px;
+    color: var(--accent-color);
+    display: flex;
     align-items: center;
-    border-left: none;
-    border-radius: 4px;
-    box-sizing: border-box;
-    color: var(--text-color);
-    display: flex;
-    font-size: 11px;
-    height: 13px;
     justify-content: center;
-    line-height: 9px;
-    padding: 4px;
-    position: relative;
+    font-family: var(--font-display, 'Syne', sans-serif);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    padding: 2px 10px;
     text-transform: uppercase;
-    top: -7px;
+    white-space: nowrap;
 }
 
-.jCxwsP {
-    display: flex;
-    padding: 0.125rem;
-    flex-direction: row;
-    padding-inline-end: 16px;
-    margin-top: 12px;
-}
-
-.csvICB {
-    width: 62px;
-    display: flex;
-    flex-shrink: 0;
-    padding-top: 2px;
-    flex-direction: row;
-    -moz-box-pack: center;
-    justify-content: center;
-}
-
-.jkmmZm {
-    position: relative;
-    min-width: 0px;
-    -moz-box-flex: 1;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    -moz-box-pack: center;
-    justify-content: center;
-}
-
-.author {
-    overflow: hidden;
-    cursor: default;
-    font-weight: 600 !important;
-    display: -webkit-box;
-    -moz-box-orient: vertical;
-    text-overflow: ellipsis;
-    white-space: normal;
-}
-
-.date-time {
-    cursor: default;
-    flex-shrink: 0;
-    gap: 4px;
-    font-size: 11px;
-    display: inline-flex;
-    color: var(--text-secondary);
-}
-
-.textContent {
-    margin: 0;
-}
+/* ── Message row ─────────────────────────────── */
 
 .msg-row {
     position: relative;
     display: flex;
     align-items: flex-start;
-}
-
-.msg-report-btn {
-    display: none;
-    position: absolute;
-    right: 8px;
-    top: 14px;
-    background: transparent;
-    border: 1px solid var(--border-color, #444);
     border-radius: 4px;
-    color: var(--text-muted, #aaa);
-    font-size: 11px;
-    padding: 2px 6px;
-    cursor: pointer;
-    opacity: 0.7;
-    line-height: 1;
+    transition: background 0.1s;
 }
 
-.msg-row:hover .msg-report-btn {
-    display: inline-block;
+.msg-row:hover {
+    background: var(--message-hover, rgba(255, 255, 255, 0.022));
 }
 
-.msg-report-btn:hover {
+@keyframes msgIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg-row {
+    animation: msgIn 0.18s ease;
+}
+
+/* ── Message layout ──────────────────────────── */
+
+.jCxwsP {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    padding: 0.2rem 16px 0.2rem 0;
+    flex-direction: row;
+    margin-top: 10px;
+}
+
+.csvICB {
+    width: 54px;
+    display: flex;
+    flex-shrink: 0;
+    padding-top: 2px;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.csvICB svg {
+    border-radius: 50%;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.msg-row:hover .csvICB svg {
+    box-shadow: 0 0 0 2px var(--accent-terciary);
+}
+
+.jkmmZm {
+    position: relative;
+    min-width: 0;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* ── Author + timestamp ──────────────────────── */
+
+.author {
+    overflow: hidden;
+    cursor: default;
+    font-family: var(--font-display, 'Syne', sans-serif);
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--accent-color);
+    letter-spacing: 0.01em;
+    display: inline;
+    -webkit-box-orient: vertical;
+    text-overflow: ellipsis;
+    white-space: normal;
+}
+
+.date-time {
+    display: inline;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    vertical-align: middle;
+    font-weight: 400;
+}
+
+.msg-row:hover .date-time {
     opacity: 1;
-    color: #f04747;
-    border-color: #f04747;
 }
 
+/* ── Message text ────────────────────────────── */
+
+.textContent {
+    margin: 1px 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--text-color);
+    word-break: break-word;
+}
+
+/* ── Action buttons ──────────────────────────── */
+
+.msg-report-btn,
 .msg-edit-btn {
     display: none;
     position: absolute;
-    right: 48px;
-    top: 14px;
-    background: transparent;
-    border: 1px solid var(--border-color, #444);
-    border-radius: 4px;
-    color: var(--text-muted, #aaa);
-    font-size: 11px;
-    padding: 2px 6px;
+    background: var(--nav-bg, #15120d);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 3px 9px;
     cursor: pointer;
-    opacity: 0.7;
-    line-height: 1;
+    line-height: 1.5;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+    top: 50%;
+    transform: translateY(-50%);
 }
 
+.msg-row:hover .msg-report-btn,
 .msg-row:hover .msg-edit-btn {
     display: inline-block;
 }
 
-.msg-edit-btn:hover {
-    opacity: 1;
-    color: var(--accent-color, #5865f2);
-    border-color: var(--accent-color, #5865f2);
+.msg-report-btn {
+    right: 8px;
 }
+
+.msg-edit-btn {
+    right: 56px;
+}
+
+.msg-report-btn:hover {
+    color: #f04747;
+    border-color: #f04747;
+    background: rgba(240, 71, 71, 0.08);
+}
+
+.msg-edit-btn:hover {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: rgba(128, 134, 212, 0.08);
+}
+
+/* ── Edit area ───────────────────────────────── */
 
 .msg-edit-area {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     align-items: flex-start;
-    margin-top: 2px;
+    margin-top: 4px;
 }
 
 .msg-edit-textarea {
     width: 100%;
     min-height: 60px;
-    padding: 6px 8px;
-    background: var(--bg-secondary, #2b2d31);
-    border: 1px solid var(--border-color, #444);
-    border-radius: 4px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
     color: var(--text-color);
-    font-size: 14px;
+    font-family: var(--font-body, 'Outfit', sans-serif);
+    font-size: 0.9375rem;
     resize: vertical;
     box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.msg-edit-textarea:focus {
+    border-color: rgba(128, 134, 212, 0.45);
 }
 
 .msg-edit-save,
 .msg-edit-cancel {
-    padding: 3px 10px;
-    border-radius: 4px;
+    padding: 4px 14px;
+    border-radius: 6px;
     border: none;
-    font-size: 12px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    font-family: var(--font-body, 'Outfit', sans-serif);
     cursor: pointer;
+    transition: opacity 0.15s;
 }
 
 .msg-edit-save {
-    background: var(--accent-color, #5865f2);
+    background: var(--accent-color);
     color: #fff;
 }
 
 .msg-edit-save:disabled {
-    opacity: 0.6;
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
 .msg-edit-cancel {
     background: transparent;
-    border: 1px solid var(--border-color, #444);
-    color: var(--text-muted, #aaa);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
 }
 
 .msg-edit-cancel:hover {
-    border-color: var(--text-muted, #aaa);
     color: var(--text-color);
+    border-color: rgba(128, 134, 212, 0.35);
 }
 
 .msg-edit-error {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: #f04747;
     margin-left: 4px;
+    align-self: center;
 }
 
 .msg-edited-label {
-    font-size: 11px;
-    color: var(--text-secondary, #888);
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
     font-style: italic;
+    margin-left: 4px;
 }

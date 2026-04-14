@@ -32,9 +32,9 @@
                             </div>
                             <% } else { %>
                             <div class="formItemContainer">
-                                <button class="formButton" id="join-btn">Join Server</button>
+                                <button type="button" class="formButton" id="join-btn">Join Server</button>
                             </div>
-                            <div class="authswitch" id="join-status"></div>
+                            <div id="join-status" style="margin-top:12px; text-align:center; font-size:14px; color:#f04747;"></div>
                             <% } %>
                         </div>
                     </div>
@@ -43,11 +43,12 @@
         </div>
     </div>
     <% if (!alreadyMember) { %>
-    <script>
-        document.getElementById('join-btn').addEventListener('click', async () => {
+    <script nonce="<%= cspNonce %>">
+        document.getElementById('join-btn').addEventListener('click', async function joinServer() {
             const btn = document.getElementById('join-btn');
             const status = document.getElementById('join-status');
             btn.disabled = true;
+            status.textContent = '';
             try {
                 const res = await fetch('/api/invites/<%= code %>/join', { method: 'POST' });
                 const data = await res.json();
@@ -58,7 +59,7 @@
                     btn.disabled = false;
                 }
             } catch (e) {
-                status.textContent = 'Network error.';
+                status.textContent = 'Network error: ' + e.message;
                 btn.disabled = false;
             }
         });

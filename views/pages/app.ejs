@@ -6,6 +6,9 @@
     <title>Aquilo</title>
     <link rel="shortcut icon" href="/assets/favicon.webp" type="image/x-icon">
     <link rel="icon" type="image/png" href="/assets/favicon.webp">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/appStyles.css">
     <link rel="stylesheet" href="/css/messagesStyle.css">
     <link rel="stylesheet" href="/css/serverSettingsStyles.css">
@@ -300,23 +303,23 @@
          data-own-pfp="<%- ownPfp %>"
          data-unlocked="<%= isUnlocked %>"
          hidden></div>
-    <div id="unlock-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
-        <div style="background:var(--bg-secondary,#2b2d31); border-radius:8px; padding:24px; width:480px; max-width:90vw;">
-            <h3 style="margin:0 0 8px; color:var(--text-color);">Unlock Server</h3>
+    <div id="unlock-modal" class="unlock-modal-backdrop">
+        <div class="unlock-modal-card">
+            <h3 class="unlock-modal-title">Unlock Server</h3>
 
             <div id="unlock-step-1">
-                <p style="margin:0 0 16px; font-size:13px; color:var(--text-muted,#aaa);">Click below to generate a challenge encrypted with your registered public key.</p>
-                <button id="unlock-get-challenge-btn" style="padding:8px 20px; background:var(--accent-color,#5865f2); color:#fff; border:none; border-radius:4px; cursor:pointer;">Get Challenge</button>
+                <p class="unlock-modal-desc">Click below to generate a challenge encrypted with your registered public key.</p>
+                <button id="unlock-get-challenge-btn" class="unlock-btn-primary">Get Challenge</button>
             </div>
 
             <div id="unlock-step-2" style="display:none;">
-                <p style="margin:0 0 8px; font-size:13px; color:var(--text-muted,#aaa);">Decrypt the message below using your PGP private key (e.g. <code>gpg --decrypt</code>), then paste the result.</p>
-                <textarea id="unlock-challenge-output" rows="6" readonly style="width:100%; box-sizing:border-box; font-family:monospace; font-size:11px; background:var(--bg-tertiary,#1e1f22); color:var(--text-muted,#aaa); border:1px solid var(--border-color,#444); border-radius:4px; padding:8px; resize:none;"></textarea>
-                <p style="margin:12px 0 6px; font-size:13px; color:var(--text-muted,#aaa);">Decrypted result:</p>
-                <input id="unlock-plaintext-input" type="text" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:13px; background:var(--bg-tertiary,#1e1f22); color:var(--text-color); border:1px solid var(--border-color,#444); border-radius:4px; padding:8px;" placeholder="Paste the decrypted text here">
-                <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
-                    <button id="unlock-btn" style="padding:8px 20px; background:var(--accent-color,#5865f2); color:#fff; border:none; border-radius:4px; cursor:pointer;">Verify</button>
-                    <span id="unlock-error" style="font-size:12px; color:#f04747;"></span>
+                <p class="unlock-modal-desc">Decrypt with your PGP private key (<code>gpg --decrypt</code>), then paste the result.</p>
+                <textarea id="unlock-challenge-output" rows="6" readonly class="unlock-challenge-output"></textarea>
+                <p class="unlock-modal-label">Decrypted result:</p>
+                <input id="unlock-plaintext-input" type="text" class="unlock-plaintext-input" placeholder="Paste the decrypted text here">
+                <div class="unlock-modal-actions">
+                    <button id="unlock-btn" class="unlock-btn-primary">Verify</button>
+                    <span id="unlock-error" class="unlock-error"></span>
                 </div>
             </div>
         </div>

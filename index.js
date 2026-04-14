@@ -107,7 +107,7 @@ app.use('/oauth/callback', loginLimiter);
 function requireKey(req, res, next) {
     if (!req.session.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
     const keyRow = db.getUserKey(req.session.user.id);
-    if (!keyRow || !keyRow.verified_at) return res.redirect('/setup');
+    if (!keyRow || !keyRow.verified_at) return res.redirect('/setup?next=' + encodeURIComponent(req.originalUrl));
     next();
 }
 

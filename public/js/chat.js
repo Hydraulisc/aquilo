@@ -130,6 +130,7 @@ if (chatContainer) {
             isUnlocked = true;
             unlockModal.style.display = 'none';
             await fetchAndRenderMessages();
+            setInterval(pollNewMessages, 2000);
         } catch {
             unlockError.textContent = 'Verification failed';
         } finally {
@@ -261,10 +262,30 @@ if (chatContainer) {
         });
     });
 
+    async function pollNewMessages() {
+        if (!isUnlocked) return;
+        const last = messageArea.lastElementChild;
+        if (!last?.id) return;
+        try {
+            const res = await fetch(`/api/channels/${channelId}/messages?after=${last.id}`);
+            if (!res.ok) return;
+            const messages = await res.json();
+            if (!messages.length) return;
+            const atBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 80;
+            messages.forEach(m => {
+                if (!document.getElementById(m.id)) {
+                    messageArea.appendChild(buildMessageEl(m));
+                }
+            });
+            if (atBottom) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        } catch {}
+    }
+
     // Init
     if (!isUnlocked) {
         showModal();
     } else {
         fetchAndRenderMessages();
+        setInterval(pollNewMessages, 2000);
     }
 }

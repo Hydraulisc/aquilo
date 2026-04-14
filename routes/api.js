@@ -146,7 +146,8 @@ router.get('/channels/:channelId/messages', timingJitter, async (req, res) => {
 
     const limit = parseInt(req.query.limit) || 50;
     const before = req.query.before || null;
-    const messages = db.getMessages(req.params.channelId, limit, before);
+    const after = req.query.after || null;
+    const messages = db.getMessages(req.params.channelId, limit, before, after);
     const serverKey = db.getServerKey(channel.server_id);
 
     const result = await Promise.all(messages.map(async (m) => {
@@ -303,8 +304,8 @@ router.post('/servers/:serverId/invites', (req, res) => {
         return res.status(403).json({ error: 'Not a member' });
     }
 
-    const maxUses = req.body.maxUses ? parseInt(req.body.maxUses, 10) : null;
-    const expiresAt = req.body.expiresAt || null;
+    const maxUses = req.body?.maxUses ? parseInt(req.body.maxUses, 10) : null;
+    const expiresAt = req.body?.expiresAt || null;
 
     const code = db.createInvite(req.params.serverId, req.session.user.id, { maxUses, expiresAt });
     res.status(201).json({ code });
