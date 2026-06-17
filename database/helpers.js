@@ -105,12 +105,16 @@ function channelCount(serverId) {
 }
 
 // Messages
-function createMessage(channelId, userId, content) {
+function createMessage(channelId, userId, content, opts = {}) {
     const id = crypto.randomUUID();
     db.prepare(
-        'INSERT INTO messages (id, channel_id, user_id, content) VALUES (?, ?, ?, ?)'
-    ).run(id, channelId, userId, content);
-    return { id, channel_id: channelId, user_id: userId, content };
+        `INSERT INTO messages (id, channel_id, user_id, content, expires_at, burn_after_read, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, channelId, userId, content, opts.expiresAt || null, opts.burnAfterRead ? 1 : 0,
+          opts.replyToId || null);
+    return { id, channel_id: channelId, user_id: userId, content,
+             expires_at: opts.expiresAt || null, burn_after_read: opts.burnAfterRead ? 1 : 0,
+             reply_to_id: opts.replyToId || null, created_at: new Date().toISOString() };
 }
 
 function getMessages(channelId, limit = 50, before = null) {
@@ -125,6 +129,16 @@ function getMessages(channelId, limit = 50, before = null) {
     return db.prepare(
         'SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?'
     ).all(channelId, limit);
+}
+
+function getMessagesAfter(channelId, afterId, limit = 50) {
+    limit = Math.min(Math.max(1, limit), 50);
+    return db.prepare(
+        `SELECT * FROM messages
+         WHERE channel_id = ? AND created_at >= (SELECT created_at FROM messages WHERE id = ?)
+           AND id != ?
+         ORDER BY created_at ASC LIMIT ?`
+    ).all(channelId, afterId, afterId, limit);
 }
 
 function editMessage(id, userId, content) {
@@ -253,36 +267,267 @@ function verifyUserKey(userId) {
     db.prepare(`UPDATE user_keys SET verified_at = datetime('now') WHERE user_id = ?`).run(userId);
 }
 
-// Server keys (AES-256-GCM)
-function setServerKey(serverId, aesKey) {
+// Channel keys (per-channel client-generated, PGP-wrapped)
+function setChannelKey(channelId, userId, wrappedKey, version = 1) {
     db.prepare(
-        `INSERT OR REPLACE INTO server_keys (server_id, aes_key) VALUES (?, ?)`
-    ).run(serverId, aesKey);
+        `INSERT OR REPLACE INTO channel_keys (channel_id, user_id, wrapped_key, key_version)
+         VALUES (?, ?, ?, ?)`
+    ).run(channelId, userId, wrappedKey, version);
 }
 
-function getServerKey(serverId) {
-    return db.prepare('SELECT * FROM server_keys WHERE server_id = ?').get(serverId);
+function getChannelKey(channelId, userId) {
+    return db.prepare(
+        'SELECT * FROM channel_keys WHERE channel_id = ? AND user_id = ?'
+    ).get(channelId, userId);
 }
 
-function encryptMessage(plaintext, hexKey) {
-    const key = Buffer.from(hexKey, 'hex');
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return Buffer.concat([iv, tag, encrypted]).toString('base64');
+function getChannelKeyVersion(channelId) {
+    const row = db.prepare(
+        'SELECT MAX(key_version) AS version FROM channel_keys WHERE channel_id = ?'
+    ).get(channelId);
+    return row?.version ?? 0;
 }
 
-function decryptMessage(b64ciphertext, hexKey) {
-    const key = Buffer.from(hexKey, 'hex');
-    const buf = Buffer.from(b64ciphertext, 'base64');
-    const iv = buf.slice(0, 12);
-    const tag = buf.slice(12, 28);
-    const encrypted = buf.slice(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(tag);
-    return decipher.update(encrypted, null, 'utf8') + decipher.final('utf8');
+const rotateChannelKeys = db.transaction((channelId, newVersion, entries) => {
+    db.prepare('DELETE FROM channel_keys WHERE channel_id = ?').run(channelId);
+    const stmt = db.prepare(
+        'INSERT INTO channel_keys (channel_id, user_id, wrapped_key, key_version) VALUES (?, ?, ?, ?)'
+    );
+    for (const { userId, wrappedKey } of entries) {
+        stmt.run(channelId, userId, wrappedKey, newVersion);
+    }
+});
+
+function deleteChannelKey(channelId, userId) {
+    db.prepare('DELETE FROM channel_keys WHERE channel_id = ? AND user_id = ?').run(channelId, userId);
 }
+
+// Message expiry & burn-after-read
+function deleteExpiredMessages() {
+    db.prepare("DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
+}
+
+function burnMessage(id) {
+    db.prepare("UPDATE messages SET content = '', viewed = 1 WHERE id = ?").run(id);
+}
+
+// Exactly one reader gets content, then content is destroyed 
+const claimBurn = db.transaction((id) => {
+    const r = db.prepare(
+        'UPDATE messages SET viewed = 1 WHERE id = ? AND burn_after_read = 1 AND viewed = 0'
+    ).run(id);
+    if (r.changes === 0) return false;
+    db.prepare("UPDATE messages SET content = '' WHERE id = ?").run(id);
+    return true;
+});
+
+const claimBurnDm = db.transaction((id) => {
+    const r = db.prepare(
+        'UPDATE dms SET viewed = 1 WHERE id = ? AND burn_after_read = 1 AND viewed = 0'
+    ).run(id);
+    if (r.changes === 0) return false;
+    db.prepare("UPDATE dms SET content = '' WHERE id = ?").run(id);
+    return true;
+});
+
+function markMessageViewed(id) {
+    db.prepare('UPDATE messages SET viewed = 1 WHERE id = ?').run(id);
+}
+
+// DMs
+function createDm(senderId, recipientId, content, encryptionMode = 'none', opts = {}) {
+    const id = crypto.randomUUID();
+    db.prepare(
+        `INSERT INTO dms (id, sender_id, recipient_id, content, encryption_mode, expires_at, burn_after_read, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, senderId, recipientId, content, encryptionMode,
+          opts.expiresAt || null, opts.burnAfterRead ? 1 : 0, opts.replyToId || null);
+    return { id, sender_id: senderId, recipient_id: recipientId, content,
+             encryption_mode: encryptionMode, reply_to_id: opts.replyToId || null,
+             created_at: new Date().toISOString() };
+}
+
+function getDm(id) {
+    return db.prepare('SELECT * FROM dms WHERE id = ?').get(id);
+}
+
+function getDms(userId, withUserId, limit = 50, before = null) {
+    limit = Math.min(Math.max(1, limit), 50);
+    if (before) {
+        return db.prepare(
+            `SELECT * FROM dms
+             WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))
+               AND created_at < (SELECT created_at FROM dms WHERE id = ?)
+             ORDER BY created_at DESC LIMIT ?`
+        ).all(userId, withUserId, withUserId, userId, before, limit);
+    }
+    return db.prepare(
+        `SELECT * FROM dms
+         WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)
+         ORDER BY created_at DESC LIMIT ?`
+    ).all(userId, withUserId, withUserId, userId, limit);
+}
+
+function getDmsAfter(userId, withUserId, afterId, limit = 50) {
+    limit = Math.min(Math.max(1, limit), 50);
+    return db.prepare(
+        `SELECT * FROM dms
+         WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))
+           AND created_at >= (SELECT created_at FROM dms WHERE id = ?)
+           AND id != ?
+         ORDER BY created_at ASC LIMIT ?`
+    ).all(userId, withUserId, withUserId, userId, afterId, afterId, limit);
+}
+
+function getDmUnreadCounts(userId) {
+    return db.prepare(
+        `SELECT d.sender_id AS partner_id, COUNT(*) AS unread
+         FROM dms d
+         LEFT JOIN dm_reads r ON r.user_id = ? AND r.partner_id = d.sender_id
+         WHERE d.recipient_id = ?
+           AND d.created_at > COALESCE(r.last_read_at, '1970-01-01')
+         GROUP BY d.sender_id`
+    ).all(userId, userId);
+}
+
+function markDmRead(userId, partnerId) {
+    db.prepare(
+        `INSERT INTO dm_reads (user_id, partner_id, last_read_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(user_id, partner_id) DO UPDATE SET last_read_at = datetime('now')`
+    ).run(userId, partnerId);
+}
+
+// Channel read tracking (mirrors dm_reads)
+function getChannelLastRead(userId, channelId) {
+    const row = db.prepare(
+        'SELECT last_read_at FROM channel_reads WHERE user_id = ? AND channel_id = ?'
+    ).get(userId, channelId);
+    return row?.last_read_at || '1970-01-01';
+}
+
+function markChannelRead(userId, channelId) {
+    db.prepare(
+        `INSERT INTO channel_reads (user_id, channel_id, last_read_at) VALUES (?, ?, datetime('now'))
+         ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = datetime('now')`
+    ).run(userId, channelId);
+}
+
+function getChannelUnreadCounts(userId, serverId) {
+    return db.prepare(
+        `SELECT m.channel_id, COUNT(*) AS unread
+         FROM messages m
+         JOIN channels c ON c.id = m.channel_id
+         LEFT JOIN channel_reads r ON r.user_id = ? AND r.channel_id = m.channel_id
+         WHERE c.server_id = ?
+           AND m.user_id != ?
+           AND m.created_at > COALESCE(r.last_read_at, '1970-01-01')
+         GROUP BY m.channel_id`
+    ).all(userId, serverId, userId);
+}
+
+function getDmConversations(userId) {
+    return db.prepare(
+        `SELECT DISTINCT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END AS partner_id
+         FROM dms WHERE sender_id = ? OR recipient_id = ?`
+    ).all(userId, userId, userId);
+}
+
+function getDmSettings(userA, userB) {
+    const [a, b] = userA < userB ? [userA, userB] : [userB, userA];
+    return db.prepare('SELECT * FROM dm_settings WHERE user_a = ? AND user_b = ?').get(a, b)
+        || { user_a: a, user_b: b, encryption_mode: 'none' };
+}
+
+function setDmEncryptionMode(userA, userB, mode) {
+    const [a, b] = userA < userB ? [userA, userB] : [userB, userA];
+    db.prepare(
+        `INSERT OR REPLACE INTO dm_settings (user_a, user_b, encryption_mode) VALUES (?, ?, ?)`
+    ).run(a, b, mode);
+}
+
+// DM AES keys (client-generated, PGP-wrapped per participant)
+function getDmKey(userA, userB, userId) {
+    const [a, b] = userA < userB ? [userA, userB] : [userB, userA];
+    return db.prepare(
+        'SELECT * FROM dm_keys WHERE user_a = ? AND user_b = ? AND user_id = ?'
+    ).get(a, b, userId);
+}
+
+const setDmKeys = db.transaction((userA, userB, entries) => {
+    const [a, b] = userA < userB ? [userA, userB] : [userB, userA];
+    const stmt = db.prepare(
+        'INSERT OR REPLACE INTO dm_keys (user_a, user_b, user_id, wrapped_key) VALUES (?, ?, ?, ?)'
+    );
+    for (const { userId, wrappedKey } of entries) {
+        stmt.run(a, b, userId, wrappedKey);
+    }
+});
+
+function markDmViewed(id) {
+    db.prepare('UPDATE dms SET viewed = 1 WHERE id = ?').run(id);
+}
+
+function burnDm(id) {
+    db.prepare("UPDATE dms SET content = '', viewed = 1 WHERE id = ?").run(id);
+}
+
+function deleteExpiredDms() {
+    db.prepare("DELETE FROM dms WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
+}
+
+// Pins
+function pinMessage(messageId, channelId, userId) {
+    try {
+        db.prepare(
+            'INSERT INTO pins (message_id, channel_id, pinned_by) VALUES (?, ?, ?)'
+        ).run(messageId, channelId, userId);
+        return true;
+    } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return false; // already pinned
+        throw err;
+    }
+}
+
+function unpinMessage(messageId) {
+    return db.prepare('DELETE FROM pins WHERE message_id = ?').run(messageId).changes > 0;
+}
+
+function getPin(messageId) {
+    return db.prepare('SELECT * FROM pins WHERE message_id = ?').get(messageId);
+}
+
+function getPins(channelId, limit = 50) {
+    return db.prepare(
+        `SELECT p.message_id, p.pinned_by, p.pinned_at, m.user_id, m.content, m.created_at
+         FROM pins p JOIN messages m ON m.id = p.message_id
+         WHERE p.channel_id = ?
+         ORDER BY p.pinned_at DESC LIMIT ?`
+    ).all(channelId, limit);
+}
+
+// Dead man's switch
+function touchLastActive(userId) {
+    db.prepare("UPDATE users SET last_active = datetime('now') WHERE id = ?").run(userId);
+}
+
+function getUsersForDeletion() {
+    return db.prepare(
+        `SELECT id FROM users
+         WHERE auto_delete_after_days IS NOT NULL
+           AND last_active < datetime('now', '-' || auto_delete_after_days || ' days')`
+    ).all();
+}
+
+const deleteUserAndData = db.transaction((userId) => {
+    db.prepare('DELETE FROM dms WHERE sender_id = ? OR recipient_id = ?').run(userId, userId);
+    db.prepare('DELETE FROM messages WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM memberships WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM user_keys WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM channel_keys WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM dm_settings WHERE user_a = ? OR user_b = ?').run(userId, userId);
+    db.prepare('DELETE FROM dm_keys WHERE user_a = ? OR user_b = ?').run(userId, userId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+});
 
 module.exports = {
     createServer,
@@ -299,6 +544,7 @@ module.exports = {
     channelCount,
     createMessage,
     getMessages,
+    getMessagesAfter,
     editMessage,
     deleteMessage,
     deleteMessageAsOwner,
@@ -319,8 +565,38 @@ module.exports = {
     setUserKey,
     getUserKey,
     verifyUserKey,
-    setServerKey,
-    getServerKey,
-    encryptMessage,
-    decryptMessage,
+    setChannelKey,
+    getChannelKey,
+    getChannelKeyVersion,
+    rotateChannelKeys,
+    deleteChannelKey,
+    deleteExpiredMessages,
+    burnMessage,
+    claimBurn,
+    claimBurnDm,
+    markMessageViewed,
+    createDm,
+    getDm,
+    getDms,
+    getDmsAfter,
+    getDmUnreadCounts,
+    markDmRead,
+    getChannelLastRead,
+    markChannelRead,
+    getChannelUnreadCounts,
+    getDmConversations,
+    pinMessage,
+    unpinMessage,
+    getPin,
+    getPins,
+    getDmSettings,
+    setDmEncryptionMode,
+    getDmKey,
+    setDmKeys,
+    markDmViewed,
+    burnDm,
+    deleteExpiredDms,
+    touchLastActive,
+    getUsersForDeletion,
+    deleteUserAndData,
 };

@@ -9,16 +9,32 @@ const db = require('../database/helpers');
 
 const router = express.Router();
 
-// TODO: Prevent clickjacking and CSRF by adding state parameter
 router.get('/login', (req, res) => {
+   const callbackHost = new URL(globals.hydrauliscCallback).host;
+    if (req.get('host') !== callbackHost) {
+        const proto = req.protocol;
+        return res.redirect(`${proto}://${callbackHost}${req.originalUrl}`);
+    }
     if (req.query.next && req.query.next.startsWith('/')) {
         req.session.postLoginRedirect = req.query.next;
     }
-    res.redirect(`${globals.hydrauliscAuthUrl}/authorize?client_id=${globals.hydrauliscAuthClient}&redirect_uri=${globals.hydrauliscCallback}&response_type=code`)
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.oauthState = state;
+    res.redirect(`${globals.hydrauliscAuthUrl}/authorize?client_id=${globals.hydrauliscAuthClient}&redirect_uri=${globals.hydrauliscCallback}&response_type=code&state=${state}`)
 })
 
 router.get('/callback', async (req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
+    if (!req.session.oauthState) {
+        return res.status(403).send('OAuth session expired');
+    }
+    if (state !== undefined && state !== req.session.oauthState) {
+        return res.status(403).send('OAuth state mismatch');
+    }
+    if (state === undefined) {
+        console.warn('[oauth] provider did not return state');
+    }
+    delete req.session.oauthState;
     try {
     const tokenRes = await axios.post(`${globals.hydrauliscAuthUrl}/token`, qs.stringify({
       code,
@@ -30,7 +46,6 @@ router.get('/callback', async (req, res) => {
     });
 
     const accessToken = tokenRes.data.access_token;
-    
 
     // Store the token in session or cookie
     req.session.accessToken = accessToken;

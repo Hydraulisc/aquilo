@@ -1,28 +1,68 @@
 const express = require('express');
 const session = require('express-session');
+const helmet = require('helmet');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const globals = JSON.parse(fs.readFileSync('globals.json', 'utf8'));
+const { SESSION_MAX_AGE_MS } = require('./constants');
 const { version } = require('./package.json');
 const db = require('./database/helpers');
 const { resolveUser } = require('./utils/resolveUser');
+const { parseUserId } = require('./utils/parseId');
 const apiRoutes = require('./routes/api');
 const oauthRoutes = require('./routes/oauth');
 
+require('./jobs/background');
+
 const app = express();
 
+// Session secret: env var, else globals, else generated
+function loadSessionSecret() {
+    if (process.env.SESSION_KEY) return process.env.SESSION_KEY;
+    if (globals.sessionKey && globals.sessionKey !== 'test_session_key') return globals.sessionKey;
+    const secretFile = path.join(__dirname, '.session-secret');
+    try {
+        return fs.readFileSync(secretFile, 'utf8').trim();
+    } catch {
+        const secret = crypto.randomBytes(32).toString('hex');
+        fs.writeFileSync(secretFile, secret, { mode: 0o600 });
+        console.warn('[session] no SESSION_KEY configured:  generated one in .session-secret');
+        return secret;
+    }
+}
+
+const isHttps = globals.protocol === 'https';
+if (isHttps) app.set('trust proxy', 1);
+
 // Middleware
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            // inline <script> blocks and onclick= handlers exist in several views
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'https://hydraulisc.net', 'data:'],
+            connectSrc: ["'self'"],
+        }
+    },
+    hsts: isHttps,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-    secret: globals.sessionKey,
+    secret: loadSessionSecret(),
     resave: true,
     saveUninitialized: false,
     name: 'connect.sid',
     cookie: {
-        secure: false,
+        // 'auto': Secure only for https
+        // production behind an https proxy gets Secure cookies, local http dev still works
+        secure: isHttps ? 'auto' : false,
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: SESSION_MAX_AGE_MS,
         path: '/',
         sameSite: 'lax'
     },
@@ -46,6 +86,7 @@ function requireKey(req, res, next) {
     if (!req.session.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
     const keyRow = db.getUserKey(req.session.user.id);
     if (!keyRow || !keyRow.verified_at) return res.redirect('/setup');
+    db.touchLastActive(req.session.user.id);
     next();
 }
 
@@ -219,33 +260,18 @@ app.get('/server/:serverId/channel/:channelId', requireKey, async (req, res) => 
         if (!channel || channel.server_id !== server.id) return res.render('pages/404');
 
         const channels = db.getChannelsForServer(server.id);
-        const rawMessages = db.getMessages(channel.id, 50);
+        const unreadMap = new Map(
+            db.getChannelUnreadCounts(user.id, server.id).map(r => [r.channel_id, r.unread])
+        );
         const userServers = db.getServersForUser(user.id);
         const resolvedUser = await resolveUser(user.id);
 
         const isUnlocked = req.session.unlockedServers?.[server.id] === true;
-        let decryptedMessages = [];
-        if (isUnlocked) {
-            const serverKey = db.getServerKey(server.id);
-            decryptedMessages = rawMessages.map(m => {
-                if (!serverKey) return m;
-                try { return { ...m, content: db.decryptMessage(m.content, serverKey.aes_key) }; }
-                catch { return m; }
-            });
-        }
 
-        // Resolve user info for each message
-        const channelMessages = await Promise.all(
-            decryptedMessages.reverse().map(async (m) => {
-                const msgUser = await resolveUser(m.user_id);
-                return {
-                    id: m.id,
-                    user: { uid: msgUser.uid, username: msgUser.username, ownPfp: msgUser.ownPfp },
-                    content: m.content,
-                    unread: false
-                };
-            })
-        );
+        // Messages are client-side E2E encrypted 
+        // page renders empty,
+        // chat.js fetches and decrypts after unlock
+        const channelMessages = [];
 
         res.render('pages/app', {
             username: resolvedUser.username,
@@ -260,12 +286,116 @@ app.get('/server/:serverId/channel/:channelId', requireKey, async (req, res) => 
             channelId: channel.id,
             channelName: channel.name,
             servers: userServers.map(s => ({ id: s.id, icon: s.icon, name: s.name, unread: false })),
-            channels: channels.map(c => ({ id: c.id, name: c.name, unread: false })),
+            channels: channels.map(c => ({
+                id: c.id,
+                name: c.name,
+                unread: c.id !== channel.id && (unreadMap.get(c.id) || 0) > 0
+            })),
             channelMessages,
             isOwner: server.owner_id === user.id,
             isUnlocked
         });
     } catch (err) {
+        res.render('pages/404');
+    }
+});
+
+// DM routes
+app.get('/dm', requireKey, async (req, res) => {
+    try {
+        const user = req.session.user;
+        const resolvedUser = await resolveUser(user.id);
+        const servers = db.getServersForUser(user.id);
+        const isUnlocked = req.session.dmUnlocked === true;
+
+        let conversations = [];
+        if (isUnlocked) {
+            const rawConvos = db.getDmConversations(user.id);
+            const unreadMap = new Map(db.getDmUnreadCounts(user.id).map(r => [r.partner_id, r.unread]));
+            conversations = await Promise.all(rawConvos.map(async ({ partner_id }) => {
+                const u = await resolveUser(partner_id);
+                const settings = db.getDmSettings(user.id, partner_id);
+                const isSelf = partner_id === user.id;
+                return { partnerId: partner_id,
+                         username: isSelf ? 'Note to self' : u.username,
+                         ownPfp: u.ownPfp,
+                         encryptionMode: settings.encryption_mode,
+                         unread: isSelf ? 0 : (unreadMap.get(partner_id) || 0) };
+            }));
+        }
+
+        res.render('pages/dm', {
+            title: globals.title,
+            username: resolvedUser.username,
+            uid: resolvedUser.uid,
+            ownPfp: resolvedUser.ownPfp,
+            servers: servers.map(s => ({ id: s.id, icon: s.icon, name: s.name })),
+            conversations,
+            partnerId: null,
+            partnerUsername: null,
+            partnerPfp: null,
+            partnerFingerprint: null,
+            encryptionMode: 'none',
+            isUnlocked,
+        });
+    } catch (err) {
+        console.error(err);
+        res.render('pages/404');
+    }
+});
+
+app.get('/dm/:userId', requireKey, async (req, res) => {
+    try {
+        const user = req.session.user;
+        const partnerId = parseUserId(req.params.userId);
+        if (partnerId === null) return res.redirect('/dm');
+        const isSelfChat = partnerId === user.id; // "Note to self"
+
+        const resolvedUser = await resolveUser(user.id);
+        const partner = await resolveUser(partnerId);
+        const servers = db.getServersForUser(user.id);
+        const isUnlocked = req.session.dmUnlocked === true;
+        const settings = db.getDmSettings(user.id, partnerId);
+        const partnerKey = db.getUserKey(partnerId);
+
+        let conversations = [];
+        if (isUnlocked) {
+            const rawConvos = db.getDmConversations(user.id);
+            const unreadMap = new Map(db.getDmUnreadCounts(user.id).map(r => [r.partner_id, r.unread]));
+            conversations = await Promise.all(rawConvos.map(async ({ partner_id }) => {
+                const u = await resolveUser(partner_id);
+                const s = db.getDmSettings(user.id, partner_id);
+                const isSelf = partner_id === user.id;
+                return { partnerId: partner_id,
+                         username: isSelf ? 'Note to self' : u.username,
+                         ownPfp: u.ownPfp,
+                         encryptionMode: s.encryption_mode,
+                         unread: (isSelf || partner_id === partnerId) ? 0 : (unreadMap.get(partner_id) || 0) };
+            }));
+            if (!conversations.find(c => c.partnerId === partnerId)) {
+                conversations.unshift({ partnerId,
+                                        username: isSelfChat ? 'Note to self' : partner.username,
+                                        ownPfp: partner.ownPfp, encryptionMode: settings.encryption_mode,
+                                        unread: 0 });
+            }
+        }
+
+        res.render('pages/dm', {
+            title: globals.title,
+            username: resolvedUser.username,
+            uid: resolvedUser.uid,
+            ownPfp: resolvedUser.ownPfp,
+            servers: servers.map(s => ({ id: s.id, icon: s.icon, name: s.name })),
+            conversations,
+            partnerId,
+            partnerUsername: isSelfChat ? 'Note to self' : partner.username,
+            partnerPfp: partner.ownPfp,
+            partnerFingerprint: partnerKey?.fingerprint || null,
+            encryptionMode: settings.encryption_mode,
+            isUnlocked,
+        });
+    } catch (err) {
+        console.error(err);
         res.render('pages/404');
     }
 });
