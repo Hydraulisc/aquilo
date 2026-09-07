@@ -1,6 +1,13 @@
 const crypto = require('crypto');
 const db = require('./init');
 
+function coarseTimestamp() {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    now.setMinutes(Math.floor(now.getMinutes() / 5) * 5);
+    return now.toISOString().replace('T', ' ').slice(0, 16);
+}
+
 // it is good practice to keep all db helper functions in here instead of doing this in api.js
 // you can just import like this: const db = require('../database/helpers');
 // and use the helper function like this: db.createServer()
@@ -52,12 +59,15 @@ function updateServer(id, userId, { name, icon }) {
     return result.changes > 0;
 }
 
-function deleteServer(id, userId) {
-    const result = db.prepare(
-        'DELETE FROM servers WHERE id = ? AND owner_id = ?'
-    ).run(id, userId);
-    return result.changes > 0;
-}
+const deleteServer = db.transaction((id, userId) => {
+    db.prepare('DELETE FROM reports WHERE server_id = ?').run(id);
+    return db.prepare('DELETE FROM servers WHERE id = ? AND owner_id = ?').run(id, userId).changes > 0;
+});
+
+const deleteServerAdmin = db.transaction((id) => {
+    db.prepare('DELETE FROM reports WHERE server_id = ?').run(id);
+    return db.prepare('DELETE FROM servers WHERE id = ?').run(id).changes > 0;
+});
 
 // Channels
 function createChannel(serverId, name) {
@@ -105,29 +115,36 @@ function channelCount(serverId) {
 }
 
 // Messages
-function createMessage(channelId, userId, content, opts = {}) {
-    const id = crypto.randomUUID();
+function createMessage(id, channelId, userId, content, opts = {}) {
+    const ts = coarseTimestamp();
     db.prepare(
-        `INSERT INTO messages (id, channel_id, user_id, content, expires_at, burn_after_read, reply_to_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, channelId, userId, content, opts.expiresAt || null, opts.burnAfterRead ? 1 : 0,
-          opts.replyToId || null);
-    return { id, channel_id: channelId, user_id: userId, content,
+        `INSERT INTO messages (id, channel_id, user_id, content, frank, expires_at, burn_after_read, reply_to_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, channelId, userId, content, opts.frank || null, opts.expiresAt || null,
+          opts.burnAfterRead ? 1 : 0, opts.replyToId || null, ts);
+    return { id, channel_id: channelId, user_id: userId, content, frank: opts.frank || null,
              expires_at: opts.expiresAt || null, burn_after_read: opts.burnAfterRead ? 1 : 0,
-             reply_to_id: opts.replyToId || null, created_at: new Date().toISOString() };
+             reply_to_id: opts.replyToId || null, created_at: ts };
 }
 
-function getMessages(channelId, limit = 50, before = null) {
+function getMessages(channelId, limit = 50, before = null, after = null) {
     limit = Math.min(Math.max(1, limit), 50);
     if (before) {
         return db.prepare(
             `SELECT * FROM messages
-             WHERE channel_id = ? AND created_at < (SELECT created_at FROM messages WHERE id = ?)
-             ORDER BY created_at DESC LIMIT ?`
+             WHERE channel_id = ? AND rowid < (SELECT rowid FROM messages WHERE id = ?)
+             ORDER BY rowid DESC LIMIT ?`
         ).all(channelId, before, limit);
     }
+    if (after) {
+        return db.prepare(
+            `SELECT * FROM messages
+             WHERE channel_id = ? AND rowid > (SELECT rowid FROM messages WHERE id = ?)
+             ORDER BY rowid ASC LIMIT ?`
+        ).all(channelId, after, limit);
+    }
     return db.prepare(
-        'SELECT * FROM messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?'
+        'SELECT * FROM messages WHERE channel_id = ? ORDER BY rowid DESC LIMIT ?'
     ).all(channelId, limit);
 }
 
@@ -143,8 +160,8 @@ function getMessagesAfter(channelId, afterId, limit = 50) {
 
 function editMessage(id, userId, content) {
     const result = db.prepare(
-        "UPDATE messages SET content = ?, edited_at = datetime('now') WHERE id = ? AND user_id = ?"
-    ).run(content, id, userId);
+        'UPDATE messages SET content = ?, edited_at = ? WHERE id = ? AND user_id = ?'
+    ).run(content, coarseTimestamp(), id, userId);
     return result.changes > 0;
 }
 
@@ -237,6 +254,41 @@ function deleteInvite(code) {
 function useInvite(code) {
     const result = db.prepare('UPDATE invites SET uses = uses + 1 WHERE code = ?').run(code);
     return result.changes > 0;
+}
+
+// Reports
+function createReport(messageId, channelId, serverId, reporterId, content, frankVerified = null) {
+    const id = crypto.randomUUID();
+    db.prepare(
+        'INSERT INTO reports (id, message_id, channel_id, server_id, reporter_id, content, frank_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, messageId, channelId, serverId, reporterId, content, frankVerified);
+    return id;
+}
+
+function getReportsForServer(serverId) {
+    return db.prepare(
+        'SELECT * FROM reports WHERE server_id = ? ORDER BY reported_at DESC'
+    ).all(serverId);
+}
+
+function getAllReports() {
+    return db.prepare(`
+        SELECT r.*, s.name AS server_name, s.owner_id AS server_owner_id,
+               c.name AS channel_name, m.user_id AS sender_id
+        FROM reports r
+        JOIN servers s ON s.id = r.server_id
+        JOIN channels c ON c.id = r.channel_id
+        LEFT JOIN messages m ON m.id = r.message_id
+        ORDER BY r.reported_at DESC
+    `).all();
+}
+
+function getReport(id) {
+    return db.prepare('SELECT * FROM reports WHERE id = ?').get(id);
+}
+
+function deleteReport(id) {
+    return db.prepare('DELETE FROM reports WHERE id = ?').run(id).changes > 0;
 }
 
 // Users cache
@@ -535,6 +587,7 @@ module.exports = {
     getServersForUser,
     updateServer,
     deleteServer,
+    deleteServerAdmin,
     createChannel,
     getChannelsForServer,
     deleteChannel,
@@ -599,4 +652,9 @@ module.exports = {
     touchLastActive,
     getUsersForDeletion,
     deleteUserAndData,
+    createReport,
+    getReportsForServer,
+    getAllReports,
+    getReport,
+    deleteReport,
 };

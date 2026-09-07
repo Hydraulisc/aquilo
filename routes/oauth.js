@@ -71,7 +71,6 @@ try {
 
   const user = userRes.data;
 
-  console.log(user);
   req.session.user = { id: user.id };
   const pfp = user.pfp || user.avatar || user.avatar_url || user.profilePicture || null;
   db.upsertUser(user.id, user.username, pfp);

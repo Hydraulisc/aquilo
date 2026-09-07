@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS messages (
     channel_id TEXT NOT NULL,
     user_id INTEGER NOT NULL,
     content TEXT NOT NULL,
+    frank TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     edited_at TEXT DEFAULT NULL,
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
@@ -182,6 +183,18 @@ CREATE TABLE IF NOT EXISTS channel_reads (
     PRIMARY KEY (user_id, channel_id),
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS reports (
+    id          TEXT PRIMARY KEY,
+    message_id  TEXT NOT NULL,
+    channel_id  TEXT NOT NULL,
+    server_id   TEXT NOT NULL,
+    reporter_id   INTEGER NOT NULL,
+    content       TEXT NOT NULL,
+    frank_verified INTEGER DEFAULT NULL,
+    reported_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reports_server ON reports(server_id);
 `);
 
 module.exports = db;

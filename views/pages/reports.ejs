@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports | <%- title %></title>
+    <link rel="shortcut icon" href="/assets/favicon.webp" type="image/x-icon">
+    <link rel="icon" type="image/png" href="/assets/favicon.webp">
+    <link rel="stylesheet" href="/css/authStyles.css">
+    <script src="/js/themeSelector.js"></script>
+    <style>
+        .reports-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .reports-header a {
+            font-size: 13px;
+            color: var(--text-secondary, #888);
+            text-decoration: none;
+        }
+        .reports-header a:hover { color: var(--text-color); }
+        .report-count {
+            font-size: 13px;
+            color: var(--text-secondary, #888);
+            margin-bottom: 16px;
+        }
+        .report-card {
+            background: var(--bg-secondary, #2b2d31);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            transition: opacity 0.2s;
+        }
+        .report-card.dismissed { opacity: 0.4; pointer-events: none; }
+        .report-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            font-size: 12px;
+            color: var(--text-secondary, #888);
+            margin-bottom: 10px;
+        }
+        .report-meta span strong { color: var(--text-color); font-weight: 600; }
+        .report-content {
+            font-size: 13px;
+            background: var(--bg-color, #1a1a1a);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 4px;
+            padding: 10px 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .report-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .report-actions button {
+            padding: 4px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color, #444);
+            background: transparent;
+            color: var(--text-muted, #aaa);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .report-actions button:hover { color: var(--text-color); border-color: var(--text-color); }
+        .report-actions button.danger:hover { color: #f04747; border-color: #f04747; }
+        .report-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .report-action-error {
+            font-size: 12px;
+            color: #f04747;
+            margin-left: 4px;
+        }
+        .report-id {
+            font-size: 11px;
+            color: var(--text-secondary, #666);
+            font-family: monospace;
+            margin-top: 8px;
+        }
+        .no-reports {
+            text-align: center;
+            color: var(--text-secondary, #888);
+            padding: 48px 0;
+            font-size: 14px;
+        }
+        .sender-owner-tag {
+            font-size: 10px;
+            color: #f04747;
+            border: 1px solid #f04747;
+            border-radius: 3px;
+            padding: 1px 5px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .frank-badge {
+            font-size: 10px;
+            padding: 1px 7px;
+            border-radius: 3px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+        .frank-badge.verified { background: #1a3a1a; color: #4caf50; }
+        .frank-badge.unverified { background: #3a2a0a; color: #ff9800; }
+        .frank-badge.legacy { background: #2a2a2a; color: #888; }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="registerContainer">
+            <div class="registerPage">
+                <div class="register">
+                    <div class="dynamicRegister">
+                        <div class="login" style="min-height: auto; width: auto !important; max-width: 960px;">
+                            <div class="reports-header">
+                                <h1 class="title" style="margin:0;">Reports</h1>
+                                <a href="/">&larr; Back to <%- title %></a>
+                            </div>
+
+                            <% if (reports.length === 0) { %>
+                                <div class="no-reports">No reports submitted yet.</div>
+                            <% } else { %>
+                                <div class="report-count"><%= reports.length %> report<%= reports.length !== 1 ? 's' : '' %></div>
+                                <% for (const r of reports) { %>
+                                <div class="report-card" data-report-id="<%= r.id %>" data-server-id="<%= r.server_id %>" data-is-owner="<%= r.sender_id && r.server_owner_id && r.sender_id === r.server_owner_id %>">
+                                    <div class="report-meta">
+                                        <span><strong>Server</strong> <%= r.server_name %></span>
+                                        <span><strong>Channel</strong> #<%= r.channel_name %></span>
+                                        <span><strong>Sender</strong>
+                                            <%= r.sender_username || '(deleted)' %>
+                                            <% if (r.is_server_owner) { %><span class="sender-owner-tag">owner</span><% } %>
+                                        </span>
+                                        <span><strong>Reported by</strong> <%= r.reporter_username %></span>
+                                        <span><strong>At</strong> <%= r.reported_at %></span>
+                                        <span>
+                                            <% if (r.frank_verified === 1) { %>
+                                            <span class="frank-badge verified">&#10003; Verified</span>
+                                            <% } else if (r.frank_verified === 0) { %>
+                                            <span class="frank-badge unverified">&#9888; Unverified</span>
+                                            <% } else { %>
+                                            <span class="frank-badge legacy">&#8212; Legacy</span>
+                                            <% } %>
+                                        </span>
+                                    </div>
+                                    <div class="report-content"><%= r.content %></div>
+                                    <div class="report-actions">
+                                        <button class="action-dismiss">Dismiss</button>
+                                        <button class="action-delete-msg danger">Delete Message</button>
+                                        <% if (r.is_server_owner) { %>
+                                        <button class="action-kick danger">Kick Sender &amp; Delete Server</button>
+                                        <% } else { %>
+                                        <button class="action-kick danger">Kick Sender</button>
+                                        <% } %>
+                                        <span class="report-action-error"></span>
+                                    </div>
+                                    <div class="report-id">msg <%= r.message_id %></div>
+                                </div>
+                                <% } %>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/js/adminReports.js"></script>
+</body>
+</html>

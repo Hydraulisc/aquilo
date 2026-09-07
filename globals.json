@@ -11,5 +11,6 @@
   "hydrauliscAuthClient": null,
   "hydrauliscAuthToken": null,
   "discord_invite": null,
-  "aquilo_invite": "https://aquilo.hydraulisc.net"
+  "aquilo_invite": "https://aquilo.hydraulisc.net",
+  "instanceAdmins": []
 }

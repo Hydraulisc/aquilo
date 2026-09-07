@@ -120,6 +120,9 @@ if (chatContainer) {
 
         const div = document.createElement('div');
         div.id = msg.id;
+        div.className = 'msg-row';
+
+        const isOwn = msg.user.username === username;
 
         const contentDiv = document.createElement('div');
         contentDiv.id = 'message-content';
@@ -161,7 +164,9 @@ if (chatContainer) {
                         '<a href="#" class="msg-pin-btn" title="Pin" style="margin-left:6px; font-size:11px; opacity:0.5; text-decoration:none; color:var(--text-color,#fff);">' + PIN_ICON + '</a>' +
                     '</span>' +
                 '</div>' +
-            '</div>';
+            '</div>' +
+            (isOwn ? '<button class="msg-edit-btn" data-message-id="' + escapeHtml(msg.id) + '" title="Edit message">&#9998;</button>' : '') +
+            '<button class="msg-report-btn" data-message-id="' + escapeHtml(msg.id) + '" title="Report message">&#9888;</button>';
 
         div.querySelector('.jkmmZm').appendChild(contentDiv);
 
@@ -461,6 +466,110 @@ if (chatContainer) {
                 textarea.focus();
             }
         }
+    });
+
+    // Message actions (edit + report)
+    messageArea.addEventListener('click', async (e) => {
+        if (e.target.classList.contains('msg-report-btn')) {
+            const messageId = e.target.dataset.messageId;
+            const cached = decryptedCache.get(messageId);
+            const content = cached ? cached.plaintext : '';
+            if (!content) return;
+            try {
+                await fetch(`/api/messages/${messageId}/report`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+            } catch {}
+            return;
+        }
+
+        if (!e.target.classList.contains('msg-edit-btn')) return;
+
+        const btn = e.target;
+        const messageId = btn.dataset.messageId;
+        const msgRow = document.getElementById(messageId);
+        if (!msgRow) return;
+
+        const contentEl = msgRow.querySelector('p.textContent');
+        if (!contentEl) return;
+        const originalText = contentEl.textContent;
+
+        const editArea = document.createElement('div');
+        editArea.className = 'msg-edit-area';
+
+        const ta = document.createElement('textarea');
+        ta.className = 'msg-edit-textarea';
+        ta.value = originalText;
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'msg-edit-save';
+        saveBtn.textContent = 'Save';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'msg-edit-cancel';
+        cancelBtn.textContent = 'Cancel';
+
+        const errorEl = document.createElement('span');
+        errorEl.className = 'msg-edit-error';
+
+        editArea.appendChild(ta);
+        editArea.appendChild(saveBtn);
+        editArea.appendChild(cancelBtn);
+        editArea.appendChild(errorEl);
+        contentEl.replaceWith(editArea);
+        ta.focus();
+
+        cancelBtn.addEventListener('click', () => {
+            editArea.replaceWith(contentEl);
+        });
+
+        const doSave = async () => {
+            const newText = ta.value.trim();
+            if (!newText) return;
+            saveBtn.disabled = true;
+            errorEl.textContent = '';
+            try {
+                const ck = channelKeyCache.get(channelId);
+                const content = ck ? await Crypto.encrypt(newText, ck) : newText;
+                const res = await fetch(`/api/messages/${messageId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    if (res.status === 403 && err.error === 'Server locked') {
+                        isUnlocked = false;
+                        editArea.replaceWith(contentEl);
+                        showModal();
+                    } else {
+                        errorEl.textContent = err.error || 'Edit failed';
+                        saveBtn.disabled = false;
+                    }
+                    return;
+                }
+                decryptedCache.set(messageId, { ...decryptedCache.get(messageId), plaintext: newText });
+                const newP = document.createElement('p');
+                newP.className = 'textContent';
+                newP.textContent = newText;
+                const editedLabel = document.createElement('span');
+                editedLabel.className = 'msg-edited-label';
+                editedLabel.textContent = ' (edited)';
+                newP.appendChild(editedLabel);
+                editArea.replaceWith(newP);
+            } catch {
+                errorEl.textContent = 'Edit failed';
+                saveBtn.disabled = false;
+            }
+        };
+
+        saveBtn.addEventListener('click', doSave);
+        ta.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSave(); }
+            if (e.key === 'Escape') { cancelBtn.click(); }
+        });
     });
 
     if (!isUnlocked) {

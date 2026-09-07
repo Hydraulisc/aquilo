@@ -1,0 +1,30 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+As of the 7th of September 2026, the operators of this Aquilo instance warrant that:
+
+    - We have not been served any government orders.
+    - We have not been compelled to provide backdoor access to any government or third party.
+    - We have not been subject to any gag orders preventing disclosure of legal demands.
+    - We have not been required to modify our systems to allow surveillance.
+    - User encryption keys and private communications remain inaccessible to us by design.
+
+This canary is updated periodically.
+If it disappears or is not updated, users should infer that one or more of the above statements may no longer be accurate.
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCAAdFiEEEVBZC1+5QhrI1/NVFUBADRCtXmIFAmqfFgwACgkQFUBADRCt
+XmLU9Q/9EE3KwfdS00nVVI91GmCFkpD5NS2dipx1QzKnzs0qShJhyw61YGH5/+vH
+oO+Xr3IEOi875snCaCYFCy6kMRi4ju6vR4/URhJSiqOaQrLcuzSoqHoPAdhoorTd
+onnovykdQsT1OAGe8Abo5hQZiWTM1xB/H3McYuDCoNe8jZoHYLkIx9y3gy9Ayj8o
+Ej8YdTOGqJjii1/MUZTunpFTzIh0GphlhSTiywkW/GGgxkAtXLuwbqBxN4vAYqvw
+Vlop3GLXXiEDKPlQVC/660zwjrVtNcobglinAVUfxAVGjc/FJg2v7TqqhfH4BcVB
+nNtW5hQDa+caBP9AU9oORoQX9HPGibHicz6I90iQgzyuaY8pxDIDlFIVDhCq8A25
++5OP6W/mAnXSUwa1THznaYTt1wXNFmNG2sJFkrBTlJgLld2JkSQhQSzCohCBlyUH
+3EbFjc0HW53KLZWcgX49MYuUoOIgK6aBYvrFMBkw1w+BDLAx6aClIFcECtFdg1w4
+YcwXToSvXmVllGD2v1rN21SoIGW68PgZE1MS92m81gu325RT6o8fs4U6wNCugva3
+YHWPD9p0bZE1NNy9gWTRSNZvA5vrtSbPz1KRwoqXeVcBkDLWwXxm9k9VQZyCj85i
+0z2SkhMkrbbfuwibgywL+LrNHkPzink2bmqeBXqxMmb0dIdTuZ0=
+=8Aqn
+-----END PGP SIGNATURE-----
+
