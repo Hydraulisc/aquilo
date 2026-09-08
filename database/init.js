@@ -140,6 +140,8 @@ migrate('messages.burn_after_read', !msgCols.includes('burn_after_read'),
     () => db.exec("ALTER TABLE messages ADD COLUMN burn_after_read INTEGER NOT NULL DEFAULT 0"));
 migrate('messages.viewed', !msgCols.includes('viewed'),
     () => db.exec("ALTER TABLE messages ADD COLUMN viewed INTEGER NOT NULL DEFAULT 0"));
+migrate('messages.frank', !msgCols.includes('frank'),
+    () => db.exec("ALTER TABLE messages ADD COLUMN frank TEXT DEFAULT NULL"));
 
 // Migrate users table
 const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
@@ -156,6 +158,12 @@ migrate('messages.reply_to_id', !msgCols.includes('reply_to_id'),
 const dmCols = db.prepare("PRAGMA table_info(dms)").all().map(c => c.name);
 migrate('dms.reply_to_id', !dmCols.includes('reply_to_id'),
     () => db.exec("ALTER TABLE dms ADD COLUMN reply_to_id TEXT DEFAULT NULL"));
+
+const reportCols = db.prepare("PRAGMA table_info(reports)").all().map(c => c.name);
+if (reportCols.length > 0) {
+    migrate('reports.frank_verified', !reportCols.includes('frank_verified'),
+        () => db.exec("ALTER TABLE reports ADD COLUMN frank_verified INTEGER DEFAULT NULL"));
+}
 
 // Pins and DM read tracking
 db.exec(`
