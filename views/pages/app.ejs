@@ -25,7 +25,7 @@
                                 <div class="userProfilePicContainer">
                                     <div class="userProfilePic">
                                         <div class="itemContainer">
-                                            <a href="#hoome">
+                                            <a href="/dm">
                                                 <div>
                                                     <span>
                                                         <svg class="userSelectNone" width="42" height="42" viewBox="0 0 32 32">
@@ -43,11 +43,6 @@
                                             <div class="separator"></div>
                                         </div>
                                     </div>
-                                    <!--    
-                                            TO-DO:
-                                            PERFORM CHECK FOR servers != null
-                                            SO WE CAN FORCE USERS TO JOIN A SERVER (LOL)
-                                    -->
                                     <% if (servers.length) { %>
                                         <% for (const server of servers) { %>
                                             <div>
@@ -76,21 +71,6 @@
                                         </div>
                                     <% } %>
                                     <div>
-                                        <a href="/dm">
-                                            <div class="itemContainer">
-                                                <div>
-                                                    <svg class="userSelectNone" width="42" height="42" viewBox="0 0 32 32">
-                                                        <foreignObject x="0" y="0" width="32" height="32">
-                                                            <div class="gafLvO">
-                                                                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="var(--text-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26px" height="26px">
-                                                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                                                                </svg>
-                                                            </div>
-                                                        </foreignObject>
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                        </a>
                                         <a href="#create" id="open-create-modal">
                                             <div class="itemContainer">
                                                 <div>
@@ -192,7 +172,7 @@
                 </div>
                 <div class="_3LgFW">
                     <% if (!serverId) { %>
-                    <div style="display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; gap:12px; opacity:0.5;">
+                    <div style="display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; gap:12px; opacity:0.5; width: 50%; margin-left: auto; margin-right: auto;">
                         <p style="font-size:18px; font-weight:600;">No server selected</p>
                         <p style="font-size:13px;">Create or join a server from the sidebar.</p>
                     </div>
