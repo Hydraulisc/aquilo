@@ -10,13 +10,13 @@
 </head>
 <body>
     <nav class="settings_nav">
-        <a href="#" tabindex="-1" data-section="account" class="active navlink">Account</a>
-        <a href="#" tabindex="-1" data-section="profile" class="navlink">Profile</a>
-        <a href="#" tabindex="-1" data-section="theme" class="navlink">Theme</a>
-        <a href="#" tabindex="-1" data-section="notifications" class="navlink">Notifications</a>
-        <a href="#" tabindex="-1" data-section="language" class="navlink">Language</a>
-        <a href="#" tabindex="-1" data-section="features" class="navlink">Features</a>
-        <a href="#" tabindex="-1" data-section="feedback" class="navlink">Feedback</a>
+        <a href="#account" tabindex="-1" data-section="account" class="active navlink">Account</a>
+        <a href="#privacy" tabindex="-1" data-section="privacy" class="navlink">Privacy</a>
+        <a href="#theme" tabindex="-1" data-section="theme" class="navlink">Theme</a>
+        <a href="#notifications" tabindex="-1" data-section="notifications" class="navlink">Notifications</a>
+        <a href="#language" tabindex="-1" data-section="language" class="navlink">Language</a>
+        <a href="#features" tabindex="-1" data-section="features" class="navlink">Features</a>
+        <a href="#feedback" tabindex="-1" data-section="feedback" class="navlink">Feedback</a>
         <a href="https://git.sooox.cc/draulisc-on-forgejo/aquilo" tabindex="-1" target="_blank">Source</a>
         <a href="<%- kofiURL %>" tabindex="-1" target="_blank">Donate</a>
         <div style="padding: 14px;">
@@ -24,15 +24,30 @@
         </div>
     </nav>
     <main class="settings_content">
+        <div class="return_btn">
+            <a href="/">x</a>
+        </div>
         <section id="account" class="settings_section">
-            <h1>Account Settings</h1>
-            <p>(placeholder)</p>
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Account Settings</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section id="profile" class="settings_section" style="display:none;">
-            <h1>Profile</h1>
-            <p>(placeholder)</p>
+        <section id="privacy" class="settings_section" >
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Privacy</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section id="theme" class="settings_section" style="display:none;">
+        <section id="theme" class="settings_section" >
             <div class="settings_container">
                 <div class="settings_scroll">
                     <div class="settings_order">
@@ -143,23 +158,46 @@
                 </div>
             </div>
         </section>
-        <section id="notifications" class="settings_section" style="display:none;">
-            <h1>Notifications</h1>
-            <p>(placeholder)</p>
+        <section id="notifications" class="settings_section" >
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Notifications</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section id="language" class="settings_section" style="display:none;">
-            <h1>Language</h1>
-            <p>(placeholder)</p>
+        <section id="language" class="settings_section" >
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Language</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section id="features" class="settings_section" style="display:none;">
-            <h1>Features</h1>
-            <p>(placeholder)</p>
+        <section id="features" class="settings_section" >
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Features</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        <section id="feedback" class="settings_section" style="display:none;">
-            <h1>Feedback</h1>
-            <p>(placeholder)</p>
+        <section id="feedback" class="settings_section" >
+            <div class="settings_container">
+                <div class="settings_scroll">
+                    <div class="settings_order">
+                        <h1>Feedback</h1>
+                        <p>(placeholder)</p>
+                    </div>
+                </div>
+            </div>
         </section>
-
     </main>
     
     <script src="/js/settingsNav.js" defer></script>

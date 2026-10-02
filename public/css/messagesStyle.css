@@ -99,7 +99,7 @@
 
 .author {
     overflow: hidden;
-    cursor: default;
+    cursor: pointer;
     font-family: var(--font-display, 'Syne', sans-serif);
     font-weight: 700;
     font-size: 0.875rem;
@@ -109,6 +109,10 @@
     -webkit-box-orient: vertical;
     text-overflow: ellipsis;
     white-space: normal;
+}
+
+.author:hover {
+    text-decoration: underline;
 }
 
 .date-time {

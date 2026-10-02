@@ -2,15 +2,37 @@
 const themeSelect = document.getElementById("theme-select");
 const customApply = document.getElementById("apply-custom");
 
+const customVariableNames = [
+    "bg-color",
+    "bg-secondary",
+    "text-color",
+    "text-secondary",
+    "accent-color",
+    "accent-secondary",
+    "accent-terciary",
+    "nav-bg",
+    "button-bg",
+    "button-text"
+];
+
 // load preference
 const savedTheme = localStorage.getItem("theme") || "dark";
 document.documentElement.setAttribute("data-theme", savedTheme);
 themeSelect.value = savedTheme;
+console.log(savedTheme);
 
 themeSelect.addEventListener("change", (e) => {
     document.documentElement.setAttribute("data-theme", e.target.value);
     localStorage.setItem("theme", e.target.value);
+    if(e.target.value !== "custom") clearCustomTheme();
 });
+
+// clear custom theme in renderer
+function clearCustomTheme() {
+    customVariableNames.forEach((name) => {
+        document.documentElement.style.removeProperty(`--${name}`);
+    });
+}
 
 // custom themes
 customApply.addEventListener("click", () => {
@@ -37,16 +59,11 @@ customApply.addEventListener("click", () => {
     localStorage.setItem("customTheme", JSON.stringify(vars));
 });
 
-// section switching
+// prettify section switching
 document.querySelectorAll(".settings_nav .navlink").forEach(link => {
     link.addEventListener("click", (e) => {
-        e.preventDefault();
         document.querySelectorAll(".settings_nav .navlink").forEach(l => l.classList.remove("active"));
         link.classList.add("active");
-
-        const sectionId = link.dataset.section;
-        document.querySelectorAll(".settings_section").forEach(sec => sec.style.display = "none");
-        document.getElementById(sectionId).style.display = "block";
     });
 });
 
