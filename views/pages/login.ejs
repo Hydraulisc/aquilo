@@ -30,20 +30,20 @@
                 </div>
             </div>
             <div class="panel-right">
-                <form action="/oauth/login?next=<%= next %>" method="get" class="card" id="register-form">
+                <div class="card" id="register-form">
                     <div class="tab-spacer"></div>
                     <h2 class="card-title">Sign in to your account</h2>
-                    <button type="submit" class="submit-btn">
+                    <a href="/oauth/login<%= next !== '/' ? `?next=${encodeURIComponent(next)}` : '' %>" class="submit-btn">
                         LOGIN ON HYDRAULISC
                         <span aria-hidden="true">→</span>
-                    </button>
+                    </a>
                     <div class="tab-spacer"></div>
                     <div class="legal not-really">Need an account? <a href="https://hydraulisc.net/register" target="_blank" rel="noopener noreferrer">Sign up on Hydraulisc</a>. It's free, and KYC-less!</div>
                     <hr class="divider">
                     <div class="legal">
                         by continuing, you agree you have read and understood our <a href="/canary">warrant canary</a>, and agree to abide by our <a href="about:blank">terms of service</a> and <a href="about:blank">privacy policy</a>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
