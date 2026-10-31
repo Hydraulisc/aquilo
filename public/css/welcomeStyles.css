@@ -57,6 +57,7 @@ img {
 .welcome_navbar {
     display: flex;
     padding: 60px 80px;
+    padding-top: calc(60px + env(safe-area-inset-top, 0px));
     align-items: center;
     scroll-snap-align: start;
     justify-content: space-between;
@@ -94,16 +95,19 @@ img {
     font-size: 24px;
 }
 
+.text_rotator_header {
+    line-height: 1.35;
+}
+
 .text_rotator_header .text_rotator {
-    text-align: left;
-    position: relative;
-    top: -3px;
     display: inline-block;
-    color: #8086d4;
-    vertical-align: bottom;
-    overflow: hidden;
+    vertical-align: top;
     height: 1.35em;
-    line-height: normal;
+    line-height: inherit;
+    overflow: hidden;
+    text-align: left;
+    color: var(--accent-color);
+    overflow: hidden;
 }
 
 .underline {
@@ -210,6 +214,7 @@ img {
 @media (max-width: 1024px) {
     .welcome_navbar {
         padding: 30px 40px;
+        padding-top: calc(30px + env(safe-area-inset-top, 0px));
     }
 
     .mobile_welcome_navbar {
@@ -257,6 +262,7 @@ img {
         align-items: center;
         flex-direction: column;
         padding: 20px;
+        padding-top: calc(20px + env(safe-area-inset-top, 0px));
         gap: 1rem;
     }
 
@@ -276,10 +282,6 @@ img {
 
     .text_rotator_container {
         font-size: 12px;
-    }
-
-    .text_rotator_header .text_rotator {
-        top: -2px;
     }
 
     .welcome_buttons_container {
