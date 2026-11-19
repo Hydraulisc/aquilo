@@ -13,7 +13,7 @@ async function resolveUser(userId) {
         return cached.data;
     }
 
-    const row = db.getCachedUser(userId);
+    const row = await db.getCachedUser(userId);
     const pfp = row?.pfp?.startsWith('/') ? `https://hydraulisc.net${row.pfp}` : (row?.pfp || null);
     const data = row
         ? { uid: row.id, username: row.username, ownPfp: pfp }

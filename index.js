@@ -120,7 +120,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-app.get('/js/openpgp.min.js', (req, res) => {
+app.get('/js/openpgp.min.js', async (req, res) => {
     res.sendFile(path.join(__dirname, 'node_modules/openpgp/dist/openpgp.min.js'));
 });
 
@@ -131,11 +131,11 @@ app.use('/oauth', oauthRoutes);
 app.use('/oauth/login', loginLimiter);
 app.use('/oauth/callback', loginLimiter);
 
-function requireKey(req, res, next) {
+async function requireKey(req, res, next) {
     if (!req.session.user) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
-    const keyRow = db.getUserKey(req.session.user.id);
+    const keyRow = await db.getUserKey(req.session.user.id);
     if (!keyRow || !keyRow.verified_at) return res.redirect('/setup?next=' + encodeURIComponent(req.originalUrl));
-    db.touchLastActive(req.session.user.id);
+    await db.touchLastActive(req.session.user.id);
     next();
 }
 
@@ -144,10 +144,10 @@ app.get('/', async (req, res) => {
     try {
         const user = req.session.user;
         if (user) {
-            const keyRow = db.getUserKey(user.id);
+            const keyRow = await db.getUserKey(user.id);
             if (!keyRow || !keyRow.verified_at) return res.redirect('/setup');
             const resolvedUser = await resolveUser(user.id);
-            const servers = db.getServersForUser(user.id);
+            const servers = await db.getServersForUser(user.id);
             return res.render('pages/app', {
                 username: resolvedUser.username,
                 uid: resolvedUser.uid,
@@ -208,16 +208,16 @@ app.get('/login', async (req, res) => {
     })
 })
 
-app.get('/setup', (req, res) => {
+app.get('/setup', async (req, res) => {
     if (!req.session.user) return res.redirect('/login?next=/setup');
     if (req.query.next && req.query.next.startsWith('/')) {
         req.session.postSetupRedirect = req.query.next;
     }
-    const keyRow = db.getUserKey(req.session.user.id);
+    const keyRow = await db.getUserKey(req.session.user.id);
     if (keyRow && keyRow.verified_at) {
-        const servers = db.getServersForUser(req.session.user.id);
+        const servers = await db.getServersForUser(req.session.user.id);
         if (servers.length) {
-            const channels = db.getChannelsForServer(servers[0].id);
+            const channels = await db.getChannelsForServer(servers[0].id);
             return res.redirect(channels.length
                 ? `/server/${servers[0].id}/channel/${channels[0].id}`
                 : `/server/${servers[0].id}`);
@@ -230,18 +230,18 @@ app.get('/setup', (req, res) => {
 // Invite landing page
 app.get('/invite/:code', async (req, res) => {
     try {
-        const invite = db.getInvite(req.params.code);
+        const invite = await db.getInvite(req.params.code);
         if (!invite) return res.render('pages/404');
 
-        const server = db.getServer(invite.server_id);
+        const server = await db.getServer(invite.server_id);
         if (!server) return res.render('pages/404');
 
         if (!req.session.user) {
             return res.redirect('/login?next=/invite/' + req.params.code);
         }
 
-        const memberCount = db.getMembers(invite.server_id).length;
-        const alreadyMember = db.isMember(invite.server_id, req.session.user.id);
+        const memberCount = (await db.getMembers(invite.server_id)).length;
+        const alreadyMember = await db.isMember(invite.server_id, req.session.user.id);
 
         res.render('pages/invite', {
             title: globals.title,
@@ -260,18 +260,18 @@ app.get('/server/:serverId', requireKey, async (req, res) => {
     try {
         const user = req.session.user;
 
-        const server = db.getServer(req.params.serverId);
+        const server = await db.getServer(req.params.serverId);
         if (!server) return res.render('pages/404');
-        if (!db.isMember(server.id, user.id)) return res.render('pages/404');
+        if (!(await db.isMember(server.id, user.id))) return res.render('pages/404');
 
-        const channels = db.getChannelsForServer(server.id);
+        const channels = await db.getChannelsForServer(server.id);
         const firstChannel = channels[0];
         if (firstChannel) {
             return res.redirect(`/server/${server.id}/channel/${firstChannel.id}`);
         }
 
         // Server with no channels — render empty
-        const userServers = db.getServersForUser(user.id);
+        const userServers = await db.getServersForUser(user.id);
         const resolvedUser = await resolveUser(user.id);
 
         res.render('pages/app', {
@@ -301,18 +301,18 @@ app.get('/server/:serverId/channel/:channelId', requireKey, async (req, res) => 
     try {
         const user = req.session.user;
 
-        const server = db.getServer(req.params.serverId);
+        const server = await db.getServer(req.params.serverId);
         if (!server) return res.render('pages/404');
-        if (!db.isMember(server.id, user.id)) return res.render('pages/404');
+        if (!(await db.isMember(server.id, user.id))) return res.render('pages/404');
 
-        const channel = db.getChannel(req.params.channelId);
+        const channel = await db.getChannel(req.params.channelId);
         if (!channel || channel.server_id !== server.id) return res.render('pages/404');
 
-        const channels = db.getChannelsForServer(server.id);
+        const channels = await db.getChannelsForServer(server.id);
         const unreadMap = new Map(
-            db.getChannelUnreadCounts(user.id, server.id).map(r => [r.channel_id, r.unread])
+            (await db.getChannelUnreadCounts(user.id, server.id)).map(r => [r.channel_id, r.unread])
         );
-        const userServers = db.getServersForUser(user.id);
+        const userServers = await db.getServersForUser(user.id);
         const resolvedUser = await resolveUser(user.id);
 
         const isUnlocked = req.session.unlockedServers?.[server.id] === true;
@@ -354,16 +354,16 @@ app.get('/dm', requireKey, async (req, res) => {
     try {
         const user = req.session.user;
         const resolvedUser = await resolveUser(user.id);
-        const servers = db.getServersForUser(user.id);
+        const servers = await db.getServersForUser(user.id);
         const isUnlocked = req.session.dmUnlocked === true;
 
         let conversations = [];
         if (isUnlocked) {
-            const rawConvos = db.getDmConversations(user.id);
-            const unreadMap = new Map(db.getDmUnreadCounts(user.id).map(r => [r.partner_id, r.unread]));
+            const rawConvos = await db.getDmConversations(user.id);
+            const unreadMap = new Map((await db.getDmUnreadCounts(user.id)).map(r => [r.partner_id, r.unread]));
             conversations = await Promise.all(rawConvos.map(async ({ partner_id }) => {
                 const u = await resolveUser(partner_id);
-                const settings = db.getDmSettings(user.id, partner_id);
+                const settings = await db.getDmSettings(user.id, partner_id);
                 const isSelf = partner_id === user.id;
                 return { partnerId: partner_id,
                          username: isSelf ? 'Note to self' : u.username,
@@ -402,18 +402,18 @@ app.get('/dm/:userId', requireKey, async (req, res) => {
 
         const resolvedUser = await resolveUser(user.id);
         const partner = await resolveUser(partnerId);
-        const servers = db.getServersForUser(user.id);
+        const servers = await db.getServersForUser(user.id);
         const isUnlocked = req.session.dmUnlocked === true;
-        const settings = db.getDmSettings(user.id, partnerId);
-        const partnerKey = db.getUserKey(partnerId);
+        const settings = await db.getDmSettings(user.id, partnerId);
+        const partnerKey = await db.getUserKey(partnerId);
 
         let conversations = [];
         if (isUnlocked) {
-            const rawConvos = db.getDmConversations(user.id);
-            const unreadMap = new Map(db.getDmUnreadCounts(user.id).map(r => [r.partner_id, r.unread]));
+            const rawConvos = await db.getDmConversations(user.id);
+            const unreadMap = new Map((await db.getDmUnreadCounts(user.id)).map(r => [r.partner_id, r.unread]));
             conversations = await Promise.all(rawConvos.map(async ({ partner_id }) => {
                 const u = await resolveUser(partner_id);
-                const s = db.getDmSettings(user.id, partner_id);
+                const s = await db.getDmSettings(user.id, partner_id);
                 const isSelf = partner_id === user.id;
                 return { partnerId: partner_id,
                          username: isSelf ? 'Note to self' : u.username,
@@ -454,7 +454,7 @@ app.get('/admin/reports', async (req, res) => {
     if (!req.session.user) return res.redirect('/login?next=/admin/reports');
     if (!getInstanceAdmins().includes(req.session.user.id)) return res.render('pages/404');
 
-    const reports = db.getAllReports();
+    const reports = await db.getAllReports();
     const result = await Promise.all(reports.map(async (r) => {
         const reporter = await resolveUser(r.reporter_id);
         const sender = r.sender_id ? await resolveUser(r.sender_id) : null;
@@ -470,7 +470,7 @@ app.get('/admin/reports', async (req, res) => {
 });
 
 // Warrant canary
-app.get('/canary.txt', (req, res) => {
+app.get('/canary.txt', async (req, res) => {
     const canaryPath = path.join(__dirname, 'canary.txt');
     try {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -480,7 +480,7 @@ app.get('/canary.txt', (req, res) => {
     }
 });
 
-app.get('/canary', (req, res) => {
+app.get('/canary', async (req, res) => {
     const canaryPath = path.join(__dirname, 'canary.txt');
     let canaryText = null;
     try { canaryText = fs.readFileSync(canaryPath, 'utf8').trim(); } catch {}
@@ -489,6 +489,13 @@ app.get('/canary', (req, res) => {
 
 // Start server
 const PORT = globals.hostPort || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+db.ready
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on http://localhost:${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('[db] could not connect to PostgreSQL / create schema:', err.message);
+        process.exit(1);
+    });

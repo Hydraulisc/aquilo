@@ -9,7 +9,7 @@ const db = require('../database/helpers');
 
 const router = express.Router();
 
-router.get('/login', (req, res) => {
+router.get('/login', async (req, res) => {
    const callbackHost = new URL(globals.hydrauliscCallback).host;
     if (req.get('host') !== callbackHost) {
         const proto = req.protocol;
@@ -73,13 +73,13 @@ try {
 
   req.session.user = { id: user.id };
   const pfp = user.pfp || user.avatar || user.avatar_url || user.profilePicture || null;
-  db.upsertUser(user.id, user.username, pfp);
+  await db.upsertUser(user.id, user.username, pfp);
 
   const next = req.session.postLoginRedirect;
   delete req.session.postLoginRedirect;
 
   // Require verified PGP key before going anywhere in the app
-  const keyRow = db.getUserKey(user.id);
+  const keyRow = await db.getUserKey(user.id);
   if (!keyRow || !keyRow.verified_at) {
     return res.redirect(next && next.startsWith('/') && next !== '/setup' ? `/setup?next=${encodeURIComponent(next)}` : '/setup');
   }
@@ -87,9 +87,9 @@ try {
   if (next && next.startsWith('/')) return res.redirect(next);
 
   // Smart default: go to first server/channel, or welcome
-  const servers = db.getServersForUser(user.id);
+  const servers = await db.getServersForUser(user.id);
   if (servers.length) {
-    const channels = db.getChannelsForServer(servers[0].id);
+    const channels = await db.getChannelsForServer(servers[0].id);
     return res.redirect(channels.length
       ? `/server/${servers[0].id}/channel/${channels[0].id}`
       : `/server/${servers[0].id}`);
